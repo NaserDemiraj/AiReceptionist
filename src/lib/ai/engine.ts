@@ -78,7 +78,13 @@ export async function processCustomerMessage(
     org.aiConfig ??
     (await prisma.aiConfig.create({ data: { organizationId: org.id } }));
 
-  const language = detectLanguage(text);
+  const detected = detectLanguage(text);
+  // Short/ambiguous messages ("ok", "po", "1pm works") shouldn't yank an
+  // established Albanian/German conversation back to English.
+  const language =
+    detected === "en" && conversation.language !== "en" && text.trim().split(/\s+/).length <= 6
+      ? (conversation.language as "en" | "sq" | "de")
+      : detected;
   const sentiment = detectSentiment(text);
   const isFirstCustomerMessage = !conversation.messages.some((m) => m.role === "CUSTOMER");
 
@@ -133,6 +139,10 @@ export async function processCustomerMessage(
   const messages: ChatMessage[] = [
     { role: "system", content: buildSystemPrompt(org, config, categories.map((c) => c.name)) },
     ...history,
+    {
+      role: "system",
+      content: `The customer is writing in ${LANGUAGE_NAMES[language] ?? "English"}. You MUST write your reply in ${LANGUAGE_NAMES[language] ?? "English"}, regardless of the language used earlier in the conversation.`,
+    },
     { role: "user", content: text },
   ];
 

@@ -6,9 +6,11 @@
  */
 
 const SQ_MARKERS = [
-  "përshëndetje", "faleminderit", "ju lutem", "dëshironi", "çmimi", "sa kushton",
-  "a keni", "dua", "doja", "mund të", "është", "për", "një", "divan", "dhomë",
-  "krevat", "tavolinë", "dollap", "ngjyrë", "gjendje", "porosi", "dërgesa",
+  "përshëndetje", "pershendetje", "faleminderit", "ju lutem", "dëshironi", "çmimi",
+  "sa kushton", "a keni", "dua", "doja", "mund të", "është", "për", "një", "divan",
+  "dhomë", "krevat", "tavolinë", "tavolina", "dollap", "ngjyrë", "gjendje", "porosi",
+  "dërgesa", "sugjero", "sugjeroni", "dicka", "diçka", "kërkoj", "kerkoj", "më trego",
+  "me trego", "tung", "mirëdita", "miredita", "dhomën", "dhoma", "shtëpi", "shtepi",
 ];
 
 const DE_MARKERS = [
@@ -19,7 +21,8 @@ const DE_MARKERS = [
 
 function countMatches(text: string, markers: string[]): number {
   let n = 0;
-  for (const m of markers) if (text.includes(m)) n++;
+  // Multi-word phrases ("sa kushton", "ich möchte") are unambiguous — weight 2.
+  for (const m of markers) if (text.includes(m)) n += m.includes(" ") ? 2 : 1;
   return n;
 }
 
