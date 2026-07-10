@@ -118,6 +118,17 @@ export class OpenAiCompatibleProvider implements ChatProvider {
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
+      // Groq/llama sometimes emits a malformed tool call and the API rejects
+      // its own generation with code "tool_use_failed" — but the payload
+      // contains what the model *meant* to call. Recover it instead of failing.
+      const recovered = tryRecoverFailedToolCall(text);
+      if (recovered) {
+        return {
+          content: null,
+          toolCalls: [recovered],
+          finishReason: "tool_calls",
+        };
+      }
       throw new Error(`${this.name} API error ${res.status}: ${text.slice(0, 500)}`);
     }
 
@@ -149,6 +160,26 @@ export class OpenAiCompatibleProvider implements ChatProvider {
           }
         : undefined,
     };
+  }
+}
+
+/** Extract the intended tool call from a Groq "tool_use_failed" error body. */
+function tryRecoverFailedToolCall(errorBody: string): ToolCall | null {
+  try {
+    const parsed = JSON.parse(errorBody);
+    if (parsed?.error?.code !== "tool_use_failed") return null;
+    const failed: string = parsed.error.failed_generation ?? "";
+    // Typical shape: <function=searchProducts{"category": "sofas", "maxPrice": "900"}</function>
+    const match = failed.match(/<function=(\w+)\s*[>]?\s*(\{[\s\S]*?\})/);
+    if (!match) return null;
+    JSON.parse(match[2]); // validate the args are real JSON
+    return {
+      id: "recovered_" + Math.random().toString(36).slice(2, 10),
+      name: match[1],
+      arguments: match[2],
+    };
+  } catch {
+    return null;
   }
 }
 

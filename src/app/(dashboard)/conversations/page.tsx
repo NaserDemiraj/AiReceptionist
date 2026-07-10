@@ -5,6 +5,7 @@ import { Badge, EmptyState, cx } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
+import { AgentComposer } from "@/features/conversations/components/agent-composer";
 import {
   CHANNEL_LABELS,
   CONVERSATION_STATUS_META,
@@ -196,11 +197,7 @@ export default async function ConversationsPage({
                   );
                 })}
               </div>
-              <div className="shrink-0 border-t border-line bg-card px-5 py-3">
-                <p className="text-[12px] text-ink-soft text-center">
-                  Live agent replies arrive in Milestone 2 — the AI is handling this conversation.
-                </p>
-              </div>
+              <AgentComposer conversationId={selected.id} status={selected.status} />
             </>
           )}
         </div>
