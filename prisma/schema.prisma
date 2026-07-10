@@ -1,0 +1,528 @@
+// AI Receptionist — multi-tenant SaaS schema
+// Every business-scoped row carries organizationId; all queries must filter by it.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// Tenancy & identity
+// ============================================================
+
+enum PlanTier {
+  STARTER
+  PROFESSIONAL
+  BUSINESS
+  ENTERPRISE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  AGENT
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  industry  String   @default("general") // furniture, dental, restaurant, ...
+  planTier  PlanTier @default(STARTER)
+  // Public key used by the embeddable chat widget to identify the tenant
+  widgetKey String   @unique @default(cuid())
+  // Default locale + supported AI languages (ISO 639-1)
+  defaultLanguage String   @default("en")
+  languages       String[] @default(["en"])
+  timezone        String   @default("Europe/Tirane")
+  currency        String   @default("EUR")
+
+  logoUrl String?
+  website String?
+  phone   String?
+  email   String?
+  address String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships     Membership[]
+  customers       Customer[]
+  conversations   Conversation[]
+  leads           Lead[]
+  products        Product[]
+  categories      ProductCategory[]
+  appointments    Appointment[]
+  knowledgeSources KnowledgeSource[]
+  aiConfig        AiConfig?
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  apiKeys         ApiKey[]
+  subscription    Subscription?
+}
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  name         String
+  avatarUrl    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships   Membership[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  appointments  Appointment[] // staff member assigned
+  messages      Message[]     // agent replies
+}
+
+model Membership {
+  id             String     @id @default(cuid())
+  userId         String
+  organizationId String
+  role           MemberRole @default(AGENT)
+  createdAt      DateTime   @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+// ============================================================
+// Customers, conversations, messages
+// ============================================================
+
+enum Channel {
+  WEB
+  WHATSAPP
+  INSTAGRAM
+  FACEBOOK
+  TELEGRAM
+  SMS
+  PHONE
+}
+
+enum ConversationStatus {
+  AI_ACTIVE
+  NEEDS_HUMAN
+  HUMAN_ACTIVE
+  RESOLVED
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+enum MessageRole {
+  CUSTOMER
+  AI
+  AGENT
+  SYSTEM
+}
+
+model Customer {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String?
+  phone          String?
+  email          String?
+  language       String  @default("en")
+  // Anonymous web visitors get a stable identifier before they share contact info
+  visitorId      String?
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  leads         Lead[]
+  appointments  Appointment[]
+
+  @@index([organizationId])
+  @@index([organizationId, email])
+  @@index([organizationId, phone])
+}
+
+model Conversation {
+  id             String             @id @default(cuid())
+  organizationId String
+  customerId     String
+  channel        Channel            @default(WEB)
+  status         ConversationStatus @default(AI_ACTIVE)
+  sentiment      Sentiment          @default(NEUTRAL)
+  language       String             @default("en")
+  subject        String? // short AI-generated topic, e.g. "Corner sofa inquiry"
+  // Analytics
+  firstResponseMs Int?
+  endedAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  leads        Lead[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  // Tool calls, product cards shown, language detection, etc.
+  metadata       Json?
+  // Set when role = AGENT
+  agentId        String?
+
+  createdAt DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agent        User?        @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+}
+
+// ============================================================
+// Leads
+// ============================================================
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  VISIT_BOOKED
+  WON
+  LOST
+}
+
+model Lead {
+  id             String     @id @default(cuid())
+  organizationId String
+  customerId     String
+  conversationId String?
+  status         LeadStatus @default(NEW)
+  budget         Decimal?   @db.Decimal(10, 2)
+  currency       String     @default("EUR")
+  interestedIn   String? // free-text summary, e.g. "Grey corner sofa, modern bed"
+  preferredContactTime String?
+  notes          String?
+  // Estimated value for "revenue influenced" analytics
+  estimatedValue Decimal? @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  products     LeadProduct[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+}
+
+// Products a lead expressed interest in
+model LeadProduct {
+  leadId    String
+  productId String
+
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([leadId, productId])
+}
+
+// ============================================================
+// Catalog
+// ============================================================
+
+model ProductCategory {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  parentId       String?
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     ProductCategory[] @relation("CategoryTree")
+  products     Product[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model Product {
+  id             String  @id @default(cuid())
+  organizationId String
+  categoryId     String?
+  sku            String?
+  name           String
+  description    String?
+  price          Decimal  @db.Decimal(10, 2)
+  salePrice      Decimal? @db.Decimal(10, 2)
+  currency       String   @default("EUR")
+  stock          Int      @default(0)
+  // Structured attributes the AI filters on
+  // dimensions: { widthCm, heightCm, depthCm, seats }
+  dimensions Json?
+  materials  String[] @default([])
+  colors     String[] @default([])
+  style      String? // modern, classic, scandinavian...
+  images     String[] @default([])
+  deliveryDays   Int?
+  warrantyMonths Int?
+  isActive       Boolean @default(true)
+  // External CMS sync
+  externalId   String?
+  lastSyncedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  leads        LeadProduct[]
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, isActive])
+  @@index([organizationId, categoryId])
+}
+
+// ============================================================
+// Appointments
+// ============================================================
+
+enum AppointmentType {
+  SHOWROOM_VISIT
+  CONSULTATION
+  DELIVERY
+  OTHER
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  organizationId String
+  customerId     String
+  staffId        String?
+  type           AppointmentType   @default(SHOWROOM_VISIT)
+  status         AppointmentStatus @default(PENDING)
+  startsAt       DateTime
+  endsAt         DateTime
+  notes          String?
+  confirmationSentAt DateTime?
+  reminderSentAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  staff        User?        @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, startsAt])
+  @@index([organizationId, status])
+}
+
+// ============================================================
+// Knowledge base
+// ============================================================
+
+enum KnowledgeSourceType {
+  FAQ
+  DOCUMENT
+  URL
+  CMS
+  MANUAL
+}
+
+enum KnowledgeSourceStatus {
+  PENDING
+  INDEXING
+  READY
+  ERROR
+}
+
+model KnowledgeSource {
+  id             String                @id @default(cuid())
+  organizationId String
+  type           KnowledgeSourceType
+  status         KnowledgeSourceStatus @default(PENDING)
+  title          String
+  sourceUrl      String?
+  fileName       String?
+  error          String?
+  lastIndexedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  chunks       KnowledgeChunk[]
+
+  @@index([organizationId])
+}
+
+model KnowledgeChunk {
+  id       String @id @default(cuid())
+  sourceId String
+  content  String
+  // For FAQ entries: the question; embeddings (pgvector) added in a later migration
+  heading  String?
+  position Int    @default(0)
+
+  source KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+}
+
+// ============================================================
+// AI configuration
+// ============================================================
+
+enum AiProvider {
+  GROQ
+  OPENAI
+  ANTHROPIC
+  GOOGLE
+}
+
+model AiConfig {
+  id             String     @id @default(cuid())
+  organizationId String     @unique
+  provider       AiProvider @default(GROQ)
+  model          String     @default("llama-3.3-70b-versatile")
+  temperature    Float      @default(0.4)
+  // Persona
+  assistantName String @default("Aria")
+  greeting      String @default("Hi! I'm here 24/7 — how can I help you today?")
+  instructions  String? // extra business-specific system prompt text
+  tone          String  @default("friendly-professional")
+  // Behaviour
+  autoDetectLanguage Boolean @default(true)
+  handoffEnabled     Boolean @default(true)
+  handoffKeywords    String[] @default(["human", "agent", "person"])
+  isEnabled          Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// Notifications, audit, API keys, billing
+// ============================================================
+
+enum NotificationType {
+  HIGH_VALUE_LEAD
+  APPOINTMENT_BOOKED
+  HUMAN_TAKEOVER
+  NEGATIVE_SENTIMENT
+  URGENT
+  SYSTEM
+}
+
+model Notification {
+  id             String           @id @default(cuid())
+  organizationId String
+  // Null = broadcast to all org members
+  userId  String?
+  type    NotificationType
+  title   String
+  body    String?
+  payload Json?
+  readAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id             String  @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String // e.g. "product.update", "member.invite"
+  entityType     String?
+  entityId       String?
+  metadata       Json?
+  ipAddress      String?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+}
+
+model ApiKey {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  hashedKey      String    @unique
+  prefix         String // first chars shown in UI, e.g. "airk_3f2a"
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+model Subscription {
+  id             String             @id @default(cuid())
+  organizationId String             @unique
+  plan           PlanTier           @default(STARTER)
+  status         SubscriptionStatus @default(TRIALING)
+  billingCycle   String             @default("monthly") // monthly | yearly
+  trialEndsAt    DateTime?
+  currentPeriodEnd DateTime?
+  // Stripe wiring in a later milestone
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}

@@ -1,26 +1,72 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* ==== AI Receptionist design system (from design bundle) ==== */
+  --color-canvas: #f7f7f8;
+  --color-card: #ffffff;
+  --color-line: #eaeaec;
+  --color-line-strong: #e4e4e8;
+  --color-ink: #17171a;
+  --color-ink-mid: #6b6b76;
+  --color-ink-soft: #9a9aa5;
+  --color-hover: #f2f2f4;
+  --color-row-hover: #fafafb;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-accent: #5b57d4;
+  --color-accent-strong: #4744b8;
+  --color-accent-soft: #eeedfb;
+  --color-accent-line: #d6d5f2;
+
+  --color-positive: #12805c;
+  --color-positive-strong: #0e6b4d;
+  --color-positive-soft: #eaf7f0;
+  --color-positive-line: #c6ead7;
+
+  --color-warn: #8a6d2f;
+  --color-warn-soft: #f0e9da;
+
+  --color-danger: #c4362e;
+  --color-danger-soft: #fbebea;
+
+  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), sans-serif;
+  --font-mono: var(--font-plex-mono), monospace;
+
+  --radius-card: 14px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #dcdce1;
+  border-radius: 8px;
+  border: 3px solid #f7f7f8;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.75);
+  }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.8s ease-in-out infinite;
 }
