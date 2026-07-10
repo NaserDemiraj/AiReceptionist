@@ -5,14 +5,24 @@
  *   <script src="https://YOUR-APP-DOMAIN/widget.js" data-key="WIDGET_KEY" async></script>
  */
 (function () {
-  var script = document.currentScript;
-  if (!script) return;
+  // document.currentScript is null when the script is injected dynamically
+  // (e.g. by React/Next) — fall back to finding our own tag by src.
+  var script =
+    document.currentScript ||
+    (function () {
+      var tags = document.querySelectorAll('script[src*="widget.js"][data-key]');
+      return tags.length ? tags[tags.length - 1] : null;
+    })();
+  if (!script) {
+    console.error("[ai-receptionist] widget.js: could not locate own script tag");
+    return;
+  }
   var key = script.getAttribute("data-key");
   if (!key) {
     console.error("[ai-receptionist] widget.js: missing data-key attribute");
     return;
   }
-  var origin = new URL(script.src).origin;
+  var origin = new URL(script.getAttribute("src"), window.location.href).origin;
   var ACCENT = script.getAttribute("data-color") || "#5B57D4";
 
   // ---- launcher button ----
