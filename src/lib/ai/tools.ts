@@ -94,7 +94,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "requestHuman",
     description:
-      "Escalate this conversation to a human team member. Use when the customer explicitly asks for a person, is upset, or asks something you cannot answer from the catalog and business information.",
+      "Escalate this conversation to a human team member. Use ONLY when the customer explicitly asks for a person, is clearly upset, or asks about something you genuinely cannot handle (existing order status, refunds, custom manufacturing). NEVER use it for vague or general shopping questions — ask a clarifying question or search the catalog instead.",
     parameters: {
       type: "object",
       properties: {
