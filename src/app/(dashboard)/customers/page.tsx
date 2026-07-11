@@ -5,6 +5,7 @@ import { Card, EmptyState } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
+import { CustomerRowActions } from "@/features/customers/components/customer-row-actions";
 
 export const metadata = { title: "Customers" };
 
@@ -79,6 +80,7 @@ export default async function CustomersPage({
                     <th className="font-mono text-[10.5px] uppercase tracking-wider text-ink-soft font-medium px-4 py-3 text-center">Leads</th>
                     <th className="font-mono text-[10.5px] uppercase tracking-wider text-ink-soft font-medium px-4 py-3 text-center">Visits</th>
                     <th className="font-mono text-[10.5px] uppercase tracking-wider text-ink-soft font-medium px-4 py-3">Last active</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -121,6 +123,12 @@ export default async function CustomersPage({
                         </td>
                         <td className="px-4 py-3 text-ink-soft text-[12.5px]">
                           {formatDistanceToNow(lastConv?.updatedAt ?? c.updatedAt, { addSuffix: true })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <CustomerRowActions
+                            customerId={c.id}
+                            customerName={c.name ?? "this visitor"}
+                          />
                         </td>
                       </tr>
                     );

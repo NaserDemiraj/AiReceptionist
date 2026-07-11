@@ -6,6 +6,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { AgentComposer } from "@/features/conversations/components/agent-composer";
+import { AutoRefresh } from "@/components/auto-refresh";
 import {
   CHANNEL_LABELS,
   CONVERSATION_STATUS_META,
@@ -58,6 +59,7 @@ export default async function ConversationsPage({
   return (
     <>
       <Topbar title="Conversations" />
+      <AutoRefresh intervalMs={8000} />
       <div className="flex-1 flex min-h-0">
         {/* List pane */}
         <div className="w-[340px] shrink-0 border-r border-line bg-card flex flex-col min-h-0">

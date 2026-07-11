@@ -59,6 +59,32 @@ export async function updateOrgProfile(
   return { success: true };
 }
 
+export async function rotateWidgetKey(): Promise<void> {
+  const { org, user, role } = await requireOrg();
+  if (role === "AGENT") throw forbidden("Only owners and admins can rotate the widget key");
+
+  const { randomUUID } = await import("node:crypto");
+  const newKey = `wk_${randomUUID().replace(/-/g, "")}`;
+
+  await prisma.$transaction([
+    prisma.organization.update({
+      where: { id: org.id },
+      data: { widgetKey: newKey },
+    }),
+    prisma.auditLog.create({
+      data: {
+        organizationId: org.id,
+        userId: user.id,
+        action: "widget.key.rotate",
+        entityType: "Organization",
+        entityId: org.id,
+      },
+    }),
+  ]);
+
+  revalidatePath("/settings");
+}
+
 const widgetSchema = z.object({
   widgetColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Pick a valid color"),
   widgetPosition: z.enum(["right", "left"]),

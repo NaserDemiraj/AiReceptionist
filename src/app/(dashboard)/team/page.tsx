@@ -1,9 +1,9 @@
 import { format } from "date-fns";
-import { Badge, Button, Card } from "@/components/ui";
+import { Badge, Card } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
-import { UserPlus } from "lucide-react";
+import { InvitePanel } from "@/features/team/components/invite-panel";
 
 export const metadata = { title: "Team Members" };
 
@@ -14,26 +14,34 @@ const ROLE_META: Record<string, { label: string; tone: "accent" | "positive" | "
 };
 
 export default async function TeamPage() {
-  const { org } = await requireOrg();
+  const { org, role } = await requireOrg();
 
-  const members = await prisma.membership.findMany({
-    where: { organizationId: org.id },
-    orderBy: { createdAt: "asc" },
-    include: { user: true },
-  });
+  const [members, invites] = await Promise.all([
+    prisma.membership.findMany({
+      where: { organizationId: org.id },
+      orderBy: { createdAt: "asc" },
+      include: { user: true },
+    }),
+    prisma.invite.findMany({
+      where: { organizationId: org.id, usedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   return (
     <>
-      <Topbar
-        title="Team Members"
-        actions={
-          <Button disabled title="Invites arrive in a later milestone">
-            <UserPlus size={15} />
-            Invite member
-          </Button>
-        }
-      />
-      <div className="flex-1 overflow-y-auto px-[26px] pt-6 pb-10">
+      <Topbar title="Team Members" />
+      <div className="flex-1 overflow-y-auto px-[26px] pt-6 pb-10 space-y-4">
+        {role !== "AGENT" && (
+          <InvitePanel
+            invites={invites.map((i) => ({
+              id: i.id,
+              token: i.token,
+              role: i.role,
+              expiresAt: i.expiresAt.toISOString(),
+            }))}
+          />
+        )}
         <Card className="max-w-[760px] overflow-hidden">
           {members.map((m) => {
             const meta = ROLE_META[m.role] ?? ROLE_META.AGENT;

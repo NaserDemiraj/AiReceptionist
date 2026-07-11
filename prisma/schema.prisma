@@ -66,6 +66,7 @@ model Organization {
   subscription    Subscription?
   quotes          Quote[]
   site            Website?
+  invites         Invite[]
 }
 
 model User {
@@ -509,6 +510,23 @@ model ApiKey {
   lastUsedAt     DateTime?
   expiresAt      DateTime?
   revokedAt      DateTime?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model Invite {
+  id             String     @id @default(cuid())
+  organizationId String
+  token          String     @unique @default(cuid())
+  role           MemberRole @default(AGENT)
+  createdById    String?
+  expiresAt      DateTime
+  usedAt         DateTime?
+  usedByEmail    String?
 
   createdAt DateTime @default(now())
 

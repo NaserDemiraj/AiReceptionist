@@ -51,6 +51,17 @@ export interface ChatProvider {
   chat(messages: ChatMessage[], options: ChatOptions): Promise<ChatResult>;
 }
 
+/** Transient failure worth retrying (rate limit, server error, network). */
+class RetryableError extends Error {
+  constructor(
+    message: string,
+    public readonly retryAfterMs?: number,
+  ) {
+    super(message);
+    this.name = "RetryableError";
+  }
+}
+
 /* ============================================================
  * Groq adapter (OpenAI-compatible API)
  * Also works verbatim against api.openai.com or any compatible
@@ -75,6 +86,30 @@ export class OpenAiCompatibleProvider implements ChatProvider {
   }
 
   async chat(messages: ChatMessage[], options: ChatOptions): Promise<ChatResult> {
+    // Free-tier providers rate-limit aggressively; retry transient failures
+    // (429/5xx/network) with backoff before giving up.
+    const MAX_ATTEMPTS = 3;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        return await this.chatOnce(messages, options, attempt < MAX_ATTEMPTS);
+      } catch (err) {
+        lastError = err;
+        // TypeError = fetch network failure — also transient
+        const transient = err instanceof RetryableError || err instanceof TypeError;
+        if (!transient || attempt === MAX_ATTEMPTS) throw err;
+        const delay = (err instanceof RetryableError && err.retryAfterMs) || attempt * 1200;
+        await new Promise((r) => setTimeout(r, Math.min(delay, 6000)));
+      }
+    }
+    throw lastError;
+  }
+
+  private async chatOnce(
+    messages: ChatMessage[],
+    options: ChatOptions,
+    canRetry: boolean,
+  ): Promise<ChatResult> {
     const body = {
       model: options.model,
       temperature: options.temperature ?? 0.4,
@@ -128,6 +163,13 @@ export class OpenAiCompatibleProvider implements ChatProvider {
           toolCalls: [recovered],
           finishReason: "tool_calls",
         };
+      }
+      if (canRetry && (res.status === 429 || res.status >= 500)) {
+        const retryAfter = Number(res.headers.get("retry-after"));
+        throw new RetryableError(
+          `${this.name} API error ${res.status}`,
+          Number.isFinite(retryAfter) ? retryAfter * 1000 : undefined,
+        );
       }
       throw new Error(`${this.name} API error ${res.status}: ${text.slice(0, 500)}`);
     }

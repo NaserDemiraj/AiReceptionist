@@ -4,6 +4,7 @@ import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { OrgProfileForm } from "@/features/settings/components/org-profile-form";
 import { WidgetSettingsForm } from "@/features/settings/components/widget-settings-form";
+import { RotateKeyButton } from "@/features/settings/components/rotate-key-button";
 
 export const metadata = { title: "Settings" };
 
@@ -41,9 +42,15 @@ export default async function SettingsPage() {
             <p className="text-[12.5px] text-ink-mid mb-4">
               Paste this one line on any website to put your AI receptionist on it:
             </p>
-            <code className="block font-mono text-[11.5px] bg-hover border border-line rounded-lg px-3 py-2.5 select-all break-all mb-5">
+            <code className="block font-mono text-[11.5px] bg-hover border border-line rounded-lg px-3 py-2.5 select-all break-all mb-3">
               {`<script src="https://YOUR-DOMAIN/widget.js" data-key="${org.widgetKey}" async></script>`}
             </code>
+            <div className="flex items-center gap-3 mb-5">
+              <RotateKeyButton />
+              <span className="text-[11.5px] text-ink-soft">
+                Rotate if the key was exposed — old snippets stop working instantly.
+              </span>
+            </div>
             <WidgetSettingsForm
               initial={{
                 widgetColor: config.widgetColor,

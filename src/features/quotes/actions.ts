@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { forbidden, notFound } from "@/lib/errors";
+import { computeQuoteTotals } from "./totals";
 
 export type QuoteFormState = { error?: string } | undefined;
 
@@ -53,14 +54,7 @@ export async function createQuote(
   });
   if (!customer) return { error: "Customer not found" };
 
-  const subtotal = d.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const discountTotal = d.items.reduce(
-    (s, i) => s + i.quantity * i.unitPrice * (i.discountPct / 100),
-    0,
-  );
-  const taxable = subtotal - discountTotal;
-  const taxAmount = taxable * (d.taxRate / 100);
-  const total = taxable + taxAmount;
+  const { subtotal, discountTotal, taxAmount, total } = computeQuoteTotals(d.items, d.taxRate);
 
   const year = new Date().getFullYear();
   const count = await prisma.quote.count({ where: { organizationId: org.id } });

@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Receptionist
 
-## Getting Started
+A multi-tenant SaaS platform that gives small businesses a **24/7 AI employee**: it answers
+customers on their website, recommends products from a live catalog, captures leads, books
+appointments, answers policy questions from a knowledge base, follows up automatically, and
+hands off to humans when needed. Businesses also get a generated public website with the
+assistant built in.
 
-First, run the development server:
+First flagship tenant: **MAMAJ Furniture** (demo data included). Languages: English,
+Albanian, German (auto-detected per message).
+
+## Stack
+
+| Layer | Choice |
+|---|---|
+| App | Next.js (App Router) + TypeScript + Tailwind v4 |
+| Database | PostgreSQL (Supabase) + Prisma ORM |
+| Auth | Auth.js v5 (credentials, JWT, org-scoped sessions) |
+| AI | Groq (`llama-3.3-70b`) behind a provider-agnostic adapter (OpenAI-compatible; Anthropic/Google addable) |
+| PDF | pdf-lib (quote generation) |
+| Tests | Vitest |
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env      # fill in the values below
+npx prisma migrate dev    # creates all tables
+npm run db:seed           # loads the MAMAJ Furniture demo tenant
+npm run dev               # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Required environment variables (see `.env.example`)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `DATABASE_URL` / `DIRECT_URL` — Supabase Postgres (transaction + session pooler)
+- `AUTH_SECRET` — any long random string (`npx auth secret`)
+- `GROQ_API_KEY` — free at console.groq.com
+- `JOBS_SECRET` — protects the cron endpoint `POST /api/v1/jobs/run`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Demo logins (after seeding)
 
-## Learn More
+| Role | Email | Password |
+|---|---|---|
+| Owner (MAMAJ) | `demo@mamaj.com` | `mamaj1234` |
+| Agent (MAMAJ) | `ardit@mamaj.com` | `mamaj1234` |
+| Second tenant | `demo@dentacare.com` | `mamaj1234` |
 
-To learn more about Next.js, take a look at the following resources:
+### Things to try
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `/demo` — a fake storefront with the embeddable chat widget; talk to the AI
+- `/site/mamaj-furniture` — the generated public website (Website Builder output)
+- Dashboard → Conversations — take over a chat from the AI as a human agent
+- Dashboard → Knowledge Base — add an FAQ, then ask the widget about it
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Architecture map
 
-## Deploy on Vercel
+```
+src/
+  app/
+    (auth)/          login, signup, invite/[token]
+    (dashboard)/     all admin screens (org-scoped via requireOrg())
+    (legal)/         privacy, terms
+    site/[slug]/     generated public websites (+ /products)
+    widget/chat/     chat UI loaded inside the widget iframe
+    api/v1/          public surface: chat, chat/rate, widget/config, jobs/run, ai/ping
+  features/          feature modules: actions (server actions) + components + queries
+  lib/
+    ai/              provider abstraction, engine (tool-use loop), tools, language
+    prisma.ts        singleton client
+    org.ts           requireOrg() — the tenancy guard every query goes through
+    jobs.ts          automations: appointment reminders + lead follow-ups
+    rate-limit.ts    in-memory sliding window (swap for Redis when scaling out)
+  components/        shared UI primitives + layout (sidebar, topbar)
+public/widget.js     embeddable loader: <script src=".../widget.js" data-key="...">
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Multi-tenancy rule:** every business row carries `organizationId`; every dashboard query
+goes through `requireOrg()`; the public chat API authenticates by per-org `widgetKey`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**AI flow:** customer message → language detect → system prompt built from org profile +
+AiConfig → Groq tool-use loop (`searchProducts`, `searchKnowledge`, `captureLead`,
+`bookAppointment`, `requestHuman`) → reply persisted with metadata → notifications fired.
+
+## Commands
+
+```bash
+npm run dev        # dev server
+npm run build      # production build
+npm test           # vitest suite
+npm run lint
+npm run db:migrate # prisma migrate dev
+npm run db:seed    # reseed demo data (wipes existing!)
+npm run db:studio  # browse the database
+```
+
+In production, schedule `POST /api/v1/jobs/run` (Bearer `JOBS_SECRET`) every ~15 min for
+reminders and follow-ups (e.g. Vercel Cron).
+
+## Roadmap (needs external accounts)
+
+Stripe billing · transactional email (Resend) — quote sending, password reset ·
+WhatsApp/Instagram via Meta Business · missed-call recovery via Twilio ·
+Google Calendar sync · product image uploads (Supabase Storage).
