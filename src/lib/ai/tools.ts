@@ -172,20 +172,32 @@ async function searchProducts(ctx: ToolContext, args: Record<string, unknown>): 
     }
     return true;
   };
-  const matchesTerms = (p: (typeof rows)[number]) => {
-    if (!terms.length) return true;
-    const hay = `${p.name} ${p.description ?? ""} ${p.category?.name ?? ""} ${p.style ?? ""}`.toLowerCase();
-    return terms.some((t) => hay.includes(t));
+  // Relevance score: name hits count most, then style/category, then description.
+  const termScore = (p: (typeof rows)[number]) => {
+    if (!terms.length) return 0;
+    const name = p.name.toLowerCase();
+    const meta = `${p.category?.name ?? ""} ${p.style ?? ""}`.toLowerCase();
+    const desc = (p.description ?? "").toLowerCase();
+    let score = 0;
+    for (const t of terms) {
+      if (name.includes(t)) score += 3;
+      else if (meta.includes(t)) score += 2;
+      else if (desc.includes(t)) score += 1;
+    }
+    return score;
   };
 
-  let results = rows.filter((p) => matchesStructured(p) && matchesTerms(p));
+  let results = rows.filter((p) => matchesStructured(p) && (!terms.length || termScore(p) > 0));
   // Text terms are a soft signal (may be in the customer's language) —
   // if they eliminate everything, fall back to the structured filters alone.
   if (results.length === 0 && terms.length) {
     results = rows.filter(matchesStructured);
   }
 
-  results = results.sort((a, b) => effectivePrice(a) - effectivePrice(b)).slice(0, 5);
+  // Most relevant first; price ascending breaks ties.
+  results = results
+    .sort((a, b) => termScore(b) - termScore(a) || effectivePrice(a) - effectivePrice(b))
+    .slice(0, 5);
 
   ctx.lastProducts = results.map((p) => ({
     id: p.id,

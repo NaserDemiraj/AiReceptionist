@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sofa } from "lucide-react";
+import { Plus, Sofa } from "lucide-react";
 import { Badge, Card, EmptyState, cx } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
@@ -38,7 +38,18 @@ export default async function ProductsPage({
 
   return (
     <>
-      <Topbar title="Products" />
+      <Topbar
+        title="Products"
+        actions={
+          <Link
+            href="/products/new"
+            className="h-9 px-4 bg-accent hover:bg-accent-strong text-white rounded-[9px] text-[13px] font-semibold inline-flex items-center gap-1.5"
+          >
+            <Plus size={15} strokeWidth={2.4} />
+            Add product
+          </Link>
+        }
+      />
       <div className="flex-1 overflow-y-auto px-[26px] pt-6 pb-10">
         <div className="flex gap-1.5 mb-4 flex-wrap">
           <Link
@@ -94,8 +105,10 @@ export default async function ProductsPage({
                   {products.map((p) => (
                     <tr key={p.id} className="border-b border-line last:border-0 hover:bg-row-hover">
                       <td className="px-4 py-3">
-                        <div className="font-semibold">{p.name}</div>
-                        {p.sku && <div className="font-mono text-[11px] text-ink-soft">{p.sku}</div>}
+                        <Link href={`/products/${p.id}/edit`} className="group">
+                          <div className="font-semibold group-hover:text-accent">{p.name}</div>
+                          {p.sku && <div className="font-mono text-[11px] text-ink-soft">{p.sku}</div>}
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-ink-mid">{p.category?.name ?? "—"}</td>
                       <td className="px-4 py-3">
