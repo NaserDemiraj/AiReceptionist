@@ -184,10 +184,13 @@ export default function LandingPage() {
           >
             Start 14-day free trial
           </Link>
-          <button className="h-[50px] px-6 bg-white/[0.08] border border-white/[0.15] rounded-xl flex items-center gap-2 text-[15px] font-semibold cursor-pointer">
+          <Link
+            href="/demo"
+            className="h-[50px] px-6 bg-white/[0.08] border border-white/[0.15] rounded-xl flex items-center gap-2 text-[15px] font-semibold"
+          >
             <Play size={17} fill="#fff" />
-            Watch 2-min demo
-          </button>
+            Try the live demo
+          </Link>
         </div>
         <div className="text-[12.5px] text-[#8A85B8] mt-[18px]">
           No credit card required · Live in under 10 minutes
@@ -444,9 +447,12 @@ export default function LandingPage() {
             >
               Start free trial
             </Link>
-            <button className="h-[50px] px-6 bg-white/10 border border-white/[0.16] rounded-xl flex items-center text-[15px] font-semibold cursor-pointer">
-              Book a demo
-            </button>
+            <Link
+              href="/demo"
+              className="h-[50px] px-6 bg-white/10 border border-white/[0.16] rounded-xl flex items-center text-[15px] font-semibold"
+            >
+              See a live demo
+            </Link>
           </div>
         </div>
       </section>
@@ -460,10 +466,15 @@ export default function LandingPage() {
         <span className="text-[12.5px] text-ink-soft">© 2026 · Built for small business</span>
         <div className="flex-1" />
         <div className="flex gap-[22px] text-[13px] text-ink-mid">
-          <span>Privacy</span>
-          <span>Terms</span>
-          <span>Status</span>
-          <span>Contact</span>
+          <Link href="/privacy" className="hover:text-ink">
+            Privacy
+          </Link>
+          <Link href="/terms" className="hover:text-ink">
+            Terms
+          </Link>
+          <a href="mailto:hello@aireceptionist.app" className="hover:text-ink">
+            Contact
+          </a>
         </div>
       </footer>
     </div>
