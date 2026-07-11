@@ -85,6 +85,7 @@ model User {
   appointments  Appointment[] // staff member assigned
   messages      Message[]     // agent replies
   quotes        Quote[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 model Membership {
@@ -516,6 +517,20 @@ model ApiKey {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique @default(cuid())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Invite {

@@ -8,6 +8,7 @@ import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { formatMoney } from "@/features/shared/labels";
 import { setQuoteStatus } from "@/features/quotes/actions";
+import { EmailQuoteButton } from "@/features/quotes/components/email-quote-button";
 
 export const metadata = { title: "Quotes" };
 
@@ -115,14 +116,17 @@ export default async function QuotesPage() {
                           {format(q.createdAt, "MMM d, HH:mm")}
                         </td>
                         <td className="px-4 py-3">
-                          <a
-                            href={`/quotes/${q.id}/pdf`}
-                            target="_blank"
-                            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-accent hover:text-accent-strong"
-                          >
-                            <Download size={13} />
-                            PDF
-                          </a>
+                          <div className="flex items-center gap-3">
+                            <a
+                              href={`/quotes/${q.id}/pdf`}
+                              target="_blank"
+                              className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-accent hover:text-accent-strong"
+                            >
+                              <Download size={13} />
+                              PDF
+                            </a>
+                            <EmailQuoteButton quoteId={q.id} hasEmail={!!q.customer.email} />
+                          </div>
                         </td>
                       </tr>
                     );

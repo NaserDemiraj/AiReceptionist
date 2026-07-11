@@ -103,6 +103,76 @@ export async function createQuote(
   redirect("/quotes");
 }
 
+export type EmailQuoteState = { error?: string; sent?: boolean } | undefined;
+
+export async function emailQuote(
+  _prev: EmailQuoteState,
+  formData: FormData,
+): Promise<EmailQuoteState> {
+  const { org, user } = await requireOrg();
+  const id = z.string().min(1).parse(formData.get("quoteId"));
+
+  const quote = await prisma.quote.findFirst({
+    where: { id, organizationId: org.id },
+    include: { customer: true },
+  });
+  if (!quote) return { error: "Quote not found" };
+  if (!quote.customer.email) {
+    return { error: "This customer has no email address on file." };
+  }
+
+  const { renderQuotePdf } = await import("./pdf");
+  const { sendEmail, emailLayout } = await import("@/lib/email");
+  const pdfBytes = await renderQuotePdf(quote, org, quote.customer);
+
+  const result = await sendEmail({
+    to: quote.customer.email,
+    subject: `Your quotation ${quote.number} from ${org.name}`,
+    html: emailLayout(
+      org.name,
+      `<p>Hi ${quote.customer.name ?? "there"},</p>
+       <p>Thank you for your interest! Your quotation <strong>${quote.number}</strong> is attached as a PDF.</p>
+       ${quote.validUntil ? `<p>It is valid until <strong>${quote.validUntil.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</strong>.</p>` : ""}
+       <p>Reply to this email or message us any time — we're happy to help.</p>
+       <p>— The ${org.name} team</p>`,
+    ),
+    attachments: [
+      {
+        filename: `${quote.number}.pdf`,
+        content: Buffer.from(pdfBytes).toString("base64"),
+      },
+    ],
+  });
+
+  if (!result.ok) {
+    return {
+      error:
+        result.error === "resend_403"
+          ? "Resend sandbox can only deliver to your own email until a domain is verified."
+          : "Sending failed — check the email configuration.",
+    };
+  }
+
+  await prisma.$transaction([
+    ...(quote.status === "DRAFT"
+      ? [prisma.quote.update({ where: { id: quote.id }, data: { status: "SENT" } })]
+      : []),
+    prisma.auditLog.create({
+      data: {
+        organizationId: org.id,
+        userId: user.id,
+        action: "quote.email",
+        entityType: "Quote",
+        entityId: quote.id,
+        metadata: { to: quote.customer.email },
+      },
+    }),
+  ]);
+
+  revalidatePath("/quotes");
+  return { sent: true };
+}
+
 const STATUSES = ["DRAFT", "SENT", "ACCEPTED", "DECLINED", "EXPIRED"] as const;
 
 export async function setQuoteStatus(formData: FormData): Promise<void> {

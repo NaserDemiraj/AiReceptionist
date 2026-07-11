@@ -21,6 +21,10 @@ export default function LoginPage() {
         <Link href="/signup" className="text-accent font-medium hover:text-accent-strong">
           Start your free trial
         </Link>
+        {" · "}
+        <Link href="/forgot-password" className="text-accent font-medium hover:text-accent-strong">
+          Forgot password?
+        </Link>
       </p>
     </div>
   );

@@ -112,3 +112,80 @@ export async function logout() {
   await signOut({ redirect: false });
   redirect("/login");
 }
+
+/* ---------- Password reset ---------- */
+
+export async function requestPasswordReset(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState & { sent?: boolean }> {
+  const email = z.string().email().safeParse(formData.get("email"));
+  if (!email.success) return { error: "Please enter a valid email" };
+
+  const { headers } = await import("next/headers");
+  const { rateLimit } = await import("@/lib/rate-limit");
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0] ?? "local";
+  if (!rateLimit(`pwreset:${ip}`, 5, 15 * 60_000).allowed) {
+    return { error: "Too many attempts — try again later." };
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: email.data.toLowerCase() } });
+  // Always report success so the form can't be used to probe which emails exist
+  if (user) {
+    const token = await prisma.passwordResetToken.create({
+      data: { userId: user.id, expiresAt: new Date(Date.now() + 60 * 60_000) },
+    });
+    const host = (await headers()).get("host") ?? "localhost:3000";
+    const proto = host.startsWith("localhost") ? "http" : "https";
+    const link = `${proto}://${host}/reset-password/${token.token}`;
+
+    const { sendEmail, emailLayout } = await import("@/lib/email");
+    await sendEmail({
+      to: user.email,
+      subject: "Reset your AI Receptionist password",
+      html: emailLayout(
+        "Password reset",
+        `<p>Hi ${user.name},</p>
+         <p>Click the button below to choose a new password. The link is valid for 1 hour.</p>
+         <p style="margin:24px 0;"><a href="${link}" style="background:#5B57D4;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:bold;">Reset password</a></p>
+         <p style="color:#9A9AA5;font-size:12px;">If you didn't request this, you can safely ignore this email.</p>`,
+      ),
+    });
+    logger.info({ email: user.email }, "password reset requested");
+  }
+
+  return { sent: true };
+}
+
+const resetSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+export async function resetPassword(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const parsed = resetSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const token = await prisma.passwordResetToken.findUnique({
+    where: { token: parsed.data.token },
+    include: { user: true },
+  });
+  if (!token || token.usedAt || token.expiresAt < new Date()) {
+    return { error: "This reset link has expired. Request a new one." };
+  }
+
+  const passwordHash = await hash(parsed.data.password, 12);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: token.userId }, data: { passwordHash } }),
+    prisma.passwordResetToken.update({
+      where: { id: token.id },
+      data: { usedAt: new Date() },
+    }),
+  ]);
+
+  logger.info({ email: token.user.email }, "password reset completed");
+  redirect("/login");
+}

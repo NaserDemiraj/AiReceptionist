@@ -393,6 +393,36 @@ async function bookAppointment(ctx: ToolContext, args: Record<string, unknown>):
     },
   });
 
+  // Confirmation email — best effort, never blocks the booking
+  try {
+    const [customer, org] = await Promise.all([
+      prisma.customer.findUnique({ where: { id: ctx.customerId } }),
+      prisma.organization.findUnique({ where: { id: ctx.orgId } }),
+    ]);
+    if (customer?.email && org) {
+      const { sendEmail, emailLayout } = await import("@/lib/email");
+      const when = startsAt.toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" });
+      await sendEmail({
+        to: customer.email,
+        subject: `Your visit to ${org.name} is booked`,
+        html: emailLayout(
+          org.name,
+          `<p>Hi ${customer.name ?? "there"},</p>
+           <p>Your ${type === "SHOWROOM_VISIT" ? "showroom visit" : "consultation"} is confirmed for <strong>${when}</strong>.</p>
+           ${org.address ? `<p>Address: ${org.address}</p>` : ""}
+           <p>Need to reschedule? Just reply in the chat — we'll sort it out.</p>
+           <p>See you soon!<br>— ${org.name}</p>`,
+        ),
+      });
+      await prisma.appointment.update({
+        where: { id: appointment.id },
+        data: { confirmationSentAt: new Date() },
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, "booking confirmation email failed");
+  }
+
   logger.info({ appointmentId: appointment.id, orgId: ctx.orgId }, "appointment booked by AI");
   return JSON.stringify({
     ok: true,

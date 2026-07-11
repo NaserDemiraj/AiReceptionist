@@ -69,6 +69,24 @@ export async function runAutomations(orgId?: string): Promise<AutomationRunResul
         const when = format(appt.startsAt, "EEEE 'at' HH:mm");
         const conversation = appt.customer.conversations[0];
 
+        // Email reminder too, when we have an address (best effort)
+        if (appt.customer.email) {
+          try {
+            const { sendEmail, emailLayout } = await import("./email");
+            await sendEmail({
+              to: appt.customer.email,
+              subject: `Reminder: your visit ${when}`,
+              html: emailLayout(
+                "Appointment reminder",
+                `<p>Hi ${appt.customer.name ?? "there"},</p>
+                 <p>${REMINDER_TEMPLATES[lang](when)}</p>`,
+              ),
+            });
+          } catch {
+            /* logged inside sendEmail */
+          }
+        }
+
         const ops = [];
         if (conversation) {
           ops.push(
