@@ -37,6 +37,8 @@ export default async function WidgetChatPage({
       orgName={org.name}
       assistantName={org.aiConfig?.assistantName ?? "Assistant"}
       greeting={org.aiConfig?.greeting ?? "Hi! How can I help you today?"}
+      accentColor={org.aiConfig?.widgetColor ?? "#5B57D4"}
+      showBranding={org.aiConfig?.showBranding ?? true}
     />
   );
 }

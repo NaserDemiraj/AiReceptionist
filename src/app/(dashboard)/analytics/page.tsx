@@ -87,6 +87,27 @@ export default async function AnalyticsPage({
             hint={`${formatMoney(data.kpis.revenueWon, org.currency)} closed won`}
           />
         </div>
+        <div className="grid grid-cols-3 gap-3.5 mb-4">
+          <Stat
+            label="Customer satisfaction"
+            value={data.kpis.csat !== null ? `${data.kpis.csat}%` : "—"}
+            hint={
+              data.kpis.csatResponses
+                ? `${data.kpis.csatResponses} rating${data.kpis.csatResponses === 1 ? "" : "s"} from the widget`
+                : "No ratings yet — customers rate in the chat widget"
+            }
+          />
+          <Stat
+            label="Missed opportunities"
+            value={data.kpis.missedOpportunities.toLocaleString()}
+            hint="Conversations that didn't become a lead"
+          />
+          <Stat
+            label="Resolved by AI"
+            value={data.kpis.resolutionRate ? `${data.kpis.resolutionRate}%` : "—"}
+            hint="Conversations closed without a human"
+          />
+        </div>
 
         {/* Conversations over time */}
         <Card className="p-5 mb-4">
@@ -124,6 +145,13 @@ export default async function AnalyticsPage({
             <BarList
               data={data.topProducts}
               emptyText="No product interest captured yet"
+            />
+          </Card>
+          <Card className="p-5">
+            <h2 className="text-[14px] font-semibold mb-4">Most common topics</h2>
+            <BarList
+              data={data.topTopics}
+              emptyText="Not enough customer messages yet"
             />
           </Card>
         </div>

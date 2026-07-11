@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Send } from "lucide-react";
+import { Bot, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 
 interface ServerMessage {
   id: string;
@@ -45,11 +45,15 @@ export function WidgetChat({
   orgName,
   assistantName,
   greeting,
+  accentColor = "#5B57D4",
+  showBranding = true,
 }: {
   widgetKey: string;
   orgName: string;
   assistantName: string;
   greeting: string;
+  accentColor?: string;
+  showBranding?: boolean;
 }) {
   const [messages, setMessages] = useState<ServerMessage[]>([]);
   const [pendingText, setPendingText] = useState<string | null>(null);
@@ -57,6 +61,7 @@ export function WidgetChat({
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string>("AI_ACTIVE");
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [rated, setRated] = useState<1 | -1 | null>(null);
   const visitorIdRef = useRef<string>("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -138,12 +143,34 @@ export function WidgetChat({
     }
   }
 
+  async function rate(rating: 1 | -1) {
+    if (!conversationId) return;
+    setRated(rating);
+    try {
+      await fetch("/api/v1/chat/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          widgetKey,
+          visitorId: visitorIdRef.current,
+          conversationId,
+          rating,
+        }),
+      });
+    } catch {
+      /* best effort */
+    }
+  }
+
   const humanMode = status === "NEEDS_HUMAN" || status === "HUMAN_ACTIVE";
 
   return (
     <div className="h-screen flex flex-col bg-canvas">
       {/* Header */}
-      <div className="h-[58px] shrink-0 bg-accent flex items-center gap-3 px-4">
+      <div
+        className="h-[58px] shrink-0 flex items-center gap-3 px-4"
+        style={{ background: accentColor }}
+      >
         <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center">
           <Bot size={18} color="#fff" strokeWidth={2.2} />
         </div>
@@ -182,9 +209,10 @@ export function WidgetChat({
                 <div
                   className={`px-3.5 py-2.5 rounded-2xl text-[13.5px] leading-relaxed max-w-[85%] whitespace-pre-wrap ${
                     isCustomer
-                      ? "bg-accent text-white rounded-tr-md"
+                      ? "text-white rounded-tr-md"
                       : "bg-card border border-line rounded-tl-md"
                   }`}
+                  style={isCustomer ? { background: accentColor } : undefined}
                 >
                   {m.role === "AGENT" && (
                     <div className="text-[10.5px] font-semibold text-accent mb-1">
@@ -235,7 +263,10 @@ export function WidgetChat({
         {/* Optimistic outgoing message */}
         {pendingText && (
           <div className="flex justify-end">
-            <div className="px-3.5 py-2.5 rounded-2xl rounded-tr-md text-[13.5px] bg-accent text-white max-w-[85%] opacity-80">
+            <div
+              className="px-3.5 py-2.5 rounded-2xl rounded-tr-md text-[13.5px] text-white max-w-[85%] opacity-80"
+              style={{ background: accentColor }}
+            >
               {pendingText}
             </div>
           </div>
@@ -282,13 +313,43 @@ export function WidgetChat({
           <button
             onClick={send}
             disabled={sending || !input.trim()}
-            className="w-[42px] h-[42px] bg-accent hover:bg-accent-strong disabled:opacity-40 text-white rounded-xl flex items-center justify-center cursor-pointer"
+            className="w-[42px] h-[42px] disabled:opacity-40 text-white rounded-xl flex items-center justify-center cursor-pointer hover:opacity-90"
+            style={{ background: accentColor }}
           >
             <Send size={16} />
           </button>
         </div>
-        <div className="text-center text-[10px] text-ink-soft mt-2">
-          Powered by AI Receptionist
+        <div className="flex items-center justify-between mt-2 px-0.5">
+          {conversationId && messages.length > 0 ? (
+            <div className="flex items-center gap-1.5 text-[10.5px] text-ink-soft">
+              {rated === null ? (
+                <>
+                  <span>Was this helpful?</span>
+                  <button
+                    onClick={() => rate(1)}
+                    title="Yes"
+                    className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-positive-soft hover:text-positive-strong cursor-pointer"
+                  >
+                    <ThumbsUp size={12} />
+                  </button>
+                  <button
+                    onClick={() => rate(-1)}
+                    title="No"
+                    className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-danger-soft hover:text-danger cursor-pointer"
+                  >
+                    <ThumbsDown size={12} />
+                  </button>
+                </>
+              ) : (
+                <span>Thanks for the feedback!</span>
+              )}
+            </div>
+          ) : (
+            <span />
+          )}
+          {showBranding && (
+            <span className="text-[10px] text-ink-soft">Powered by AI Receptionist</span>
+          )}
         </div>
       </div>
     </div>

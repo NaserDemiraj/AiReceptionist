@@ -64,6 +64,7 @@ model Organization {
   auditLogs       AuditLog[]
   apiKeys         ApiKey[]
   subscription    Subscription?
+  quotes          Quote[]
 }
 
 model User {
@@ -81,6 +82,7 @@ model User {
   auditLogs     AuditLog[]
   appointments  Appointment[] // staff member assigned
   messages      Message[]     // agent replies
+  quotes        Quote[]
 }
 
 model Membership {
@@ -149,6 +151,7 @@ model Customer {
   conversations Conversation[]
   leads         Lead[]
   appointments  Appointment[]
+  quotes        Quote[]
 
   @@index([organizationId])
   @@index([organizationId, email])
@@ -167,6 +170,8 @@ model Conversation {
   // Analytics
   firstResponseMs Int?
   endedAt         DateTime?
+  // Customer satisfaction: 1 = thumbs up, -1 = thumbs down
+  csatRating Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -232,6 +237,7 @@ model Lead {
   customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
   conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   products     LeadProduct[]
+  quotes       Quote[]
 
   @@index([organizationId, status])
   @@index([organizationId, createdAt])
@@ -431,6 +437,10 @@ model AiConfig {
   remindersEnabled   Boolean @default(true)
   followUpsEnabled   Boolean @default(true)
   followUpAfterHours Int     @default(24)
+  // Widget appearance
+  widgetColor    String  @default("#5B57D4")
+  widgetPosition String  @default("right") // right | left
+  showBranding   Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -504,6 +514,46 @@ model ApiKey {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+model Quote {
+  id             String      @id @default(cuid())
+  organizationId String
+  customerId     String
+  leadId         String?
+  createdById    String?
+  // Human-friendly sequential number per org, e.g. "Q-2026-0007"
+  number   String
+  status   QuoteStatus @default(DRAFT)
+  currency String      @default("EUR")
+  // Line items snapshot: [{ productId?, name, quantity, unitPrice, discountPct }]
+  items         Json
+  subtotal      Decimal @db.Decimal(10, 2)
+  discountTotal Decimal @db.Decimal(10, 2) @default(0)
+  taxRate       Float   @default(0) // percent
+  taxAmount     Decimal @db.Decimal(10, 2) @default(0)
+  total         Decimal @db.Decimal(10, 2)
+  notes      String?
+  validUntil DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, number])
+  @@index([organizationId, createdAt])
 }
 
 enum SubscriptionStatus {

@@ -133,6 +133,139 @@ export async function saveProduct(
   redirect("/products");
 }
 
+export type ImportState =
+  | { error?: string; imported?: number; skipped?: { line: number; reason: string }[] }
+  | undefined;
+
+/**
+ * CSV import. Required columns: name, price.
+ * Optional: sku, category, description, saleprice, stock, colors, materials,
+ * style, widthcm, depthcm, heightcm, seats, deliverydays, warrantymonths.
+ * `colors`/`materials` are ; or | separated inside the cell.
+ */
+export async function importProductsCsv(
+  _prev: ImportState,
+  formData: FormData,
+): Promise<ImportState> {
+  const { org, user, role } = await requireOrg();
+  if (role === "AGENT") throw forbidden("Only owners and admins can import products");
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a CSV file first." };
+  if (file.size > 2 * 1024 * 1024) return { error: "File too large (max 2 MB)." };
+
+  const { parseCsv } = await import("./csv");
+  const rows = parseCsv(await file.text());
+  if (rows.length < 2) return { error: "The file has no data rows." };
+
+  const header = rows[0].map((h) => h.trim().toLowerCase().replace(/[^a-z]/g, ""));
+  const col = (name: string) => header.indexOf(name);
+  if (col("name") === -1 || col("price") === -1) {
+    return { error: 'The header row must include "name" and "price" columns.' };
+  }
+
+  const cell = (row: string[], name: string): string => {
+    const i = col(name);
+    return i === -1 ? "" : (row[i] ?? "").trim();
+  };
+  const num = (s: string): number | null => {
+    if (!s) return null;
+    const n = Number(s.replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  };
+  const list = (s: string): string[] =>
+    s.split(/[;|]/).map((x) => x.trim()).filter(Boolean);
+
+  // Cache categories by lowercase name
+  const categories = new Map(
+    (
+      await prisma.productCategory.findMany({ where: { organizationId: org.id } })
+    ).map((c) => [c.name.toLowerCase(), c.id]),
+  );
+
+  let imported = 0;
+  const skipped: { line: number; reason: string }[] = [];
+
+  for (let r = 1; r < rows.length && imported < 500; r++) {
+    const row = rows[r];
+    const line = r + 1;
+    const name = cell(row, "name");
+    const price = num(cell(row, "price"));
+    if (!name || name.length < 2) {
+      skipped.push({ line, reason: "missing name" });
+      continue;
+    }
+    if (price === null || price <= 0) {
+      skipped.push({ line, reason: "invalid price" });
+      continue;
+    }
+
+    let categoryId: string | null = null;
+    const categoryName = cell(row, "category");
+    if (categoryName) {
+      const key = categoryName.toLowerCase();
+      if (!categories.has(key)) {
+        const slugBase = key.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "category";
+        const cat = await prisma.productCategory.upsert({
+          where: { organizationId_slug: { organizationId: org.id, slug: slugBase } },
+          create: { organizationId: org.id, name: categoryName, slug: slugBase },
+          update: {},
+        });
+        categories.set(key, cat.id);
+      }
+      categoryId = categories.get(key) ?? null;
+    }
+
+    const salePrice = num(cell(row, "saleprice"));
+    const dims: Record<string, number> = {};
+    for (const d of ["widthcm", "depthcm", "heightcm", "seats"] as const) {
+      const v = num(cell(row, d));
+      if (v) dims[d === "widthcm" ? "widthCm" : d === "depthcm" ? "depthCm" : d === "heightcm" ? "heightCm" : "seats"] = v;
+    }
+
+    try {
+      await prisma.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId,
+          name,
+          sku: cell(row, "sku") || null,
+          description: cell(row, "description") || null,
+          price,
+          salePrice: salePrice && salePrice < price ? salePrice : null,
+          stock: Math.max(0, Math.trunc(num(cell(row, "stock")) ?? 0)),
+          colors: list(cell(row, "colors")),
+          materials: list(cell(row, "materials")),
+          style: cell(row, "style") || null,
+          dimensions: Object.keys(dims).length ? dims : undefined,
+          deliveryDays: num(cell(row, "deliverydays"))
+            ? Math.trunc(num(cell(row, "deliverydays"))!)
+            : null,
+          warrantyMonths: num(cell(row, "warrantymonths"))
+            ? Math.trunc(num(cell(row, "warrantymonths"))!)
+            : null,
+        },
+      });
+      imported++;
+    } catch {
+      skipped.push({ line, reason: "database error (duplicate SKU/external id?)" });
+    }
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      organizationId: org.id,
+      userId: user.id,
+      action: "product.import",
+      entityType: "Product",
+      metadata: { imported, skipped: skipped.length, fileName: file.name },
+    },
+  });
+
+  revalidatePath("/products");
+  return { imported, skipped };
+}
+
 export async function deleteProduct(formData: FormData): Promise<void> {
   const { org, user, role } = await requireOrg();
   if (role === "AGENT") throw forbidden("Only owners and admins can delete products");

@@ -58,3 +58,33 @@ export async function updateOrgProfile(
   revalidatePath("/settings");
   return { success: true };
 }
+
+const widgetSchema = z.object({
+  widgetColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Pick a valid color"),
+  widgetPosition: z.enum(["right", "left"]),
+  showBranding: z.boolean(),
+});
+
+export async function updateWidgetSettings(
+  _prev: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  const { org, role } = await requireOrg();
+  if (role === "AGENT") throw forbidden("Only owners and admins can edit widget settings");
+
+  const parsed = widgetSchema.safeParse({
+    widgetColor: formData.get("widgetColor"),
+    widgetPosition: formData.get("widgetPosition"),
+    showBranding: formData.get("showBranding") === "on",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  await prisma.aiConfig.upsert({
+    where: { organizationId: org.id },
+    create: { organizationId: org.id, ...parsed.data },
+    update: parsed.data,
+  });
+
+  revalidatePath("/settings");
+  return { success: true };
+}

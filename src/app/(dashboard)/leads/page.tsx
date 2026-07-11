@@ -92,6 +92,7 @@ export default async function LeadsPage({
                     <th className="font-mono text-[10.5px] uppercase tracking-wider text-ink-soft font-medium px-4 py-3">Status</th>
                     <th className="font-mono text-[10.5px] uppercase tracking-wider text-ink-soft font-medium px-4 py-3">Contact</th>
                     <th className="font-mono text-[10.5px] uppercase tracking-wider text-ink-soft font-medium px-4 py-3">Created</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -123,6 +124,14 @@ export default async function LeadsPage({
                         </td>
                         <td className="px-4 py-3 text-ink-soft text-[12.5px]">
                           {format(lead.createdAt, "MMM d, HH:mm")}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/quotes/new?lead=${lead.id}`}
+                            className="text-[12px] font-semibold text-accent hover:text-accent-strong"
+                          >
+                            Quote →
+                          </Link>
                         </td>
                       </tr>
                     );

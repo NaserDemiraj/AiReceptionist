@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Sofa } from "lucide-react";
+import { Plus, Sofa, Upload } from "lucide-react";
 import { Badge, Card, EmptyState, cx } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
@@ -41,13 +41,22 @@ export default async function ProductsPage({
       <Topbar
         title="Products"
         actions={
-          <Link
-            href="/products/new"
-            className="h-9 px-4 bg-accent hover:bg-accent-strong text-white rounded-[9px] text-[13px] font-semibold inline-flex items-center gap-1.5"
-          >
-            <Plus size={15} strokeWidth={2.4} />
-            Add product
-          </Link>
+          <>
+            <Link
+              href="/products/import"
+              className="h-9 px-4 bg-card border border-line hover:bg-hover text-ink rounded-[9px] text-[13px] font-semibold inline-flex items-center gap-1.5"
+            >
+              <Upload size={14} />
+              Import CSV
+            </Link>
+            <Link
+              href="/products/new"
+              className="h-9 px-4 bg-accent hover:bg-accent-strong text-white rounded-[9px] text-[13px] font-semibold inline-flex items-center gap-1.5"
+            >
+              <Plus size={15} strokeWidth={2.4} />
+              Add product
+            </Link>
+          </>
         }
       />
       <div className="flex-1 overflow-y-auto px-[26px] pt-6 pb-10">
