@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Bell, Search } from "lucide-react";
+import { Bell } from "lucide-react";
+import { CommandPalette } from "@/features/search/components/command-palette";
 
 /**
  * 60px sticky topbar used by every dashboard screen.
@@ -18,13 +19,7 @@ export function Topbar({
     <header className="h-[60px] shrink-0 bg-white/80 backdrop-blur-lg border-b border-line flex items-center gap-4 px-[26px] sticky top-0 z-10">
       <div className="text-[16px] font-semibold tracking-tight text-ink">{title}</div>
       <div className="flex-1" />
-      <div className="hidden md:flex items-center gap-2 h-9 px-3 bg-hover border border-line rounded-[9px] w-[250px] text-ink-soft">
-        <Search size={15} />
-        <span className="text-[13px]">Search…</span>
-        <span className="ml-auto font-mono text-[10.5px] bg-card border border-line-strong rounded-[5px] px-[5px] py-px">
-          ⌘K
-        </span>
-      </div>
+      <CommandPalette />
       {actions}
       <button className="w-9 h-9 bg-card border border-line rounded-[9px] flex items-center justify-center relative cursor-pointer hover:bg-hover">
         <Bell size={17} className="text-ink-mid" />

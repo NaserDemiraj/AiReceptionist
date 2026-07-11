@@ -11,7 +11,8 @@ import {
 import { Badge, Card } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
-import { getDashboardData } from "@/features/dashboard/queries";
+import { getDashboardData, getSetupSteps } from "@/features/dashboard/queries";
+import { SetupChecklist } from "@/features/dashboard/components/setup-checklist";
 import {
   CHANNEL_LABELS,
   CONVERSATION_STATUS_META,
@@ -61,7 +62,10 @@ function KpiCard({
 
 export default async function DashboardPage() {
   const { org, user } = await requireOrg();
-  const data = await getDashboardData(org.id);
+  const [data, setupSteps] = await Promise.all([
+    getDashboardData(org.id),
+    getSetupSteps(org),
+  ]);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -71,6 +75,7 @@ export default async function DashboardPage() {
     <>
       <Topbar title="Dashboard" showNotificationDot />
       <div className="flex-1 overflow-y-auto px-[26px] pt-6 pb-10">
+        <SetupChecklist steps={setupSteps} />
         {/* Status strip */}
         <div className="flex items-end gap-3.5 mb-[22px] flex-wrap">
           <div>

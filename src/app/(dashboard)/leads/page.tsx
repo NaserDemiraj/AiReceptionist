@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { Users } from "lucide-react";
-import { Badge, Card, EmptyState, cx } from "@/components/ui";
+import { Card, EmptyState, cx } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { LEAD_STATUS_META, formatMoney } from "@/features/shared/labels";
+import { LeadStatusSelect } from "@/features/leads/components/lead-status-select";
 import type { LeadStatus } from "@prisma/client";
 
 export const metadata = { title: "Leads" };
@@ -97,7 +98,6 @@ export default async function LeadsPage({
                 </thead>
                 <tbody>
                   {leads.map((lead) => {
-                    const meta = LEAD_STATUS_META[lead.status];
                     return (
                       <tr key={lead.id} className="border-b border-line last:border-0 hover:bg-row-hover">
                         <td className="px-4 py-3">
@@ -114,7 +114,7 @@ export default async function LeadsPage({
                           {lead.budget ? formatMoney(lead.budget, lead.currency) : "—"}
                         </td>
                         <td className="px-4 py-3">
-                          <Badge tone={meta.tone}>{meta.label}</Badge>
+                          <LeadStatusSelect leadId={lead.id} status={lead.status} />
                         </td>
                         <td className="px-4 py-3 text-ink-mid">
                           <div className="text-[12.5px]">{lead.customer.phone ?? lead.customer.email ?? "—"}</div>

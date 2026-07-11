@@ -5,6 +5,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { APPOINTMENT_STATUS_META } from "@/features/shared/labels";
+import { AppointmentActions } from "@/features/appointments/components/appointment-actions";
 
 export const metadata = { title: "Appointments" };
 
@@ -88,6 +89,7 @@ export default async function AppointmentsPage() {
                         <div className="text-[12px] text-ink-soft hidden md:block">
                           {a.customer.phone ?? a.customer.email ?? ""}
                         </div>
+                        <AppointmentActions appointmentId={a.id} status={a.status} />
                         <Badge tone={meta.tone}>{meta.label}</Badge>
                       </div>
                     );

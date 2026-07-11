@@ -8,10 +8,15 @@ import {
   UserRound,
 } from "lucide-react";
 import type { NotificationType } from "@prisma/client";
-import { Card, EmptyState, cx } from "@/components/ui";
+import { Button, Card, EmptyState, cx } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
+import {
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "@/features/notifications/actions";
+import { CheckCheck } from "lucide-react";
 
 export const metadata = { title: "Notifications" };
 
@@ -38,7 +43,19 @@ export default async function NotificationsPage() {
 
   return (
     <>
-      <Topbar title="Notifications" />
+      <Topbar
+        title="Notifications"
+        actions={
+          notifications.some((n) => !n.readAt) ? (
+            <form action={markAllNotificationsRead}>
+              <Button variant="secondary" type="submit">
+                <CheckCheck size={14} />
+                Mark all read
+              </Button>
+            </form>
+          ) : undefined
+        }
+      />
       <div className="flex-1 overflow-y-auto px-[26px] pt-6 pb-10">
         <Card className="max-w-[680px] overflow-hidden">
           {notifications.length === 0 ? (
@@ -78,6 +95,18 @@ export default async function NotificationsPage() {
                       {formatDistanceToNow(n.createdAt, { addSuffix: true })}
                     </div>
                   </div>
+                  {!n.readAt && (
+                    <form action={markNotificationRead} className="shrink-0">
+                      <input type="hidden" name="notificationId" value={n.id} />
+                      <button
+                        type="submit"
+                        title="Mark as read"
+                        className="w-7 h-7 flex items-center justify-center rounded-md text-ink-soft hover:text-accent hover:bg-accent-soft cursor-pointer"
+                      >
+                        <CheckCheck size={14} />
+                      </button>
+                    </form>
+                  )}
                 </div>
               );
             })
