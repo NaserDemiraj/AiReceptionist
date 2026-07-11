@@ -65,6 +65,7 @@ model Organization {
   apiKeys         ApiKey[]
   subscription    Subscription?
   quotes          Quote[]
+  site            Website?
 }
 
 model User {
@@ -514,6 +515,35 @@ model ApiKey {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+}
+
+// ============================================================
+// Website builder — one generated public site per organization
+// ============================================================
+
+model Website {
+  id             String  @id @default(cuid())
+  organizationId String  @unique
+  published      Boolean @default(false)
+
+  heroTitle    String?
+  heroSubtitle String?
+  aboutText    String?
+  // [{ title, description }]
+  services Json?
+  primaryColor String @default("#5B57D4")
+
+  seoTitle       String?
+  seoDescription String?
+  googleMapsUrl  String? // embed URL for the map iframe
+
+  showProducts    Boolean @default(true)
+  showContactForm Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 enum QuoteStatus {
