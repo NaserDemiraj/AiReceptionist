@@ -38,6 +38,7 @@ function buildSystemPrompt(org: Organization, config: AiConfig, categories: stri
     `- Keep replies short and conversational: 1-4 sentences. No headers, no bullet lists unless comparing products, no markdown syntax like ** or ##.`,
     `- ALWAYS call searchProducts before mentioning any product, price, or stock number. Never invent or guess product details.`,
     `- The catalog is stored in English: always translate search terms, categories, and colors to English when calling searchProducts (e.g. "tavolinë ngrënie" → category "dining"; "gri"/"grau" → color "grey").`,
+    `- For questions about delivery, payment, installments, warranty, returns, assembly, opening hours, or anything about the business itself, call searchKnowledge FIRST and answer from what it returns. If it returns nothing relevant, say you'll check with the team — never invent policies.`,
     `- When you show products, mention name, price (and sale price if lower), and one useful detail. Offer at most 2-3 options.`,
     `- When a customer shares a name plus phone or email, or asks to be contacted, call captureLead.`,
     `- When a customer agrees on a concrete date and time for a visit or consultation, call bookAppointment (ISO format, local time).`,

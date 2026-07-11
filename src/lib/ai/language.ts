@@ -14,9 +14,11 @@ const SQ_MARKERS = [
 ];
 
 const DE_MARKERS = [
-  "hallo", "guten", "danke", "bitte", "ich möchte", "haben sie", "wie viel",
-  "kostet", "lieferung", "bestellen", "und", "nicht", "das ist", "können",
-  "schrank", "bett", "tisch", "sofa", "stuhl", "preis", "verfügbar", "größe",
+  "hallo", "guten", "danke", "bitte", "ich möchte", "ich moechte", "haben sie",
+  "wie viel", "kann ich", "gibt es", "ist das", "das ist", "kostet", "lieferung",
+  "lieferzeit", "bestellen", "nicht", "können", "zahlen", "raten", "kaufen",
+  "schrank", "bett", "tisch", "stuhl", "preis", "verfügbar", "größe", "wann",
+  "möchte", "vielen dank",
 ];
 
 function countMatches(text: string, markers: string[]): number {

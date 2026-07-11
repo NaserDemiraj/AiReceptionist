@@ -427,6 +427,10 @@ model AiConfig {
   handoffEnabled     Boolean @default(true)
   handoffKeywords    String[] @default(["human", "agent", "person"])
   isEnabled          Boolean @default(true)
+  // Automation
+  remindersEnabled   Boolean @default(true)
+  followUpsEnabled   Boolean @default(true)
+  followUpAfterHours Int     @default(24)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -92,6 +92,21 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: "searchKnowledge",
+    description:
+      "Search the business's knowledge base: delivery, payment methods, installments, warranty, returns, assembly, opening hours, company info, and other FAQs/policies. Use this for ANY non-product question before answering. Include both the customer's key words and their English translation in the query.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Key words to search for, e.g. 'delivery outside Tirana dërgesa jashtë'",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "requestHuman",
     description:
       "Escalate this conversation to a human team member. Use ONLY when the customer explicitly asks for a person, is clearly upset, or asks about something you genuinely cannot handle (existing order status, refunds, custom manufacturing). NEVER use it for vague or general shopping questions — ask a clarifying question or search the catalog instead.",
@@ -374,6 +389,67 @@ async function bookAppointment(ctx: ToolContext, args: Record<string, unknown>):
   });
 }
 
+async function searchKnowledge(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
+  const query = typeof args.query === "string" ? args.query : "";
+  const terms = [
+    ...new Set(
+      query
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((t) => t.length > 2),
+    ),
+  ];
+  if (!terms.length) {
+    return JSON.stringify({ found: 0, message: "Empty query" });
+  }
+
+  const chunks = await prisma.knowledgeChunk.findMany({
+    where: { source: { is: { organizationId: ctx.orgId, status: "READY" } } },
+    select: { content: true, heading: true, source: { select: { title: true } } },
+    take: 500,
+  });
+
+  if (chunks.length === 0) {
+    return JSON.stringify({
+      found: 0,
+      message:
+        "The knowledge base is empty. Answer only from the business facts you already have; if you can't, offer to connect a team member.",
+    });
+  }
+
+  const scored = chunks
+    .map((c) => {
+      const heading = (c.heading ?? "").toLowerCase();
+      const content = c.content.toLowerCase();
+      let score = 0;
+      for (const t of terms) {
+        if (heading.includes(t)) score += 3;
+        if (content.includes(t)) score += 1;
+      }
+      return { c, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
+
+  if (scored.length === 0) {
+    return JSON.stringify({
+      found: 0,
+      message:
+        "Nothing relevant found. If the business facts don't cover it either, say you'll check with the team rather than guessing.",
+    });
+  }
+
+  return JSON.stringify({
+    found: scored.length,
+    entries: scored.map(({ c }) => ({
+      source: c.source.title,
+      heading: c.heading ?? undefined,
+      content: c.content,
+    })),
+  });
+}
+
 async function requestHuman(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
   const reason = typeof args.reason === "string" ? args.reason : "Customer requested a human";
 
@@ -425,6 +501,8 @@ export async function executeTool(
         return await captureLead(ctx, args);
       case "bookAppointment":
         return await bookAppointment(ctx, args);
+      case "searchKnowledge":
+        return await searchKnowledge(ctx, args);
       case "requestHuman":
         return await requestHuman(ctx, args);
       default:
