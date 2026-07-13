@@ -9,12 +9,29 @@ import { prisma } from "@/lib/prisma";
 import { signIn } from "@/lib/auth";
 import { forbidden } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { getSubscriptionAccess, PLAN_LIMITS } from "@/lib/billing/plans";
 
 const INVITE_VALID_DAYS = 7;
 
 export async function createInvite(formData: FormData): Promise<void> {
   const { org, user, role } = await requireOrg();
   if (role === "AGENT") throw forbidden("Only owners and admins can invite members");
+
+  const access = await getSubscriptionAccess(org.id);
+  const memberLimit = PLAN_LIMITS[access.planForLimits].teamMembers;
+  if (memberLimit !== null) {
+    const [members, pendingInvites] = await Promise.all([
+      prisma.membership.count({ where: { organizationId: org.id } }),
+      prisma.invite.count({
+        where: { organizationId: org.id, usedAt: null, expiresAt: { gt: new Date() } },
+      }),
+    ]);
+    if (members + pendingInvites >= memberLimit) {
+      throw forbidden(
+        `Your plan includes ${memberLimit} team member${memberLimit === 1 ? "" : "s"} — upgrade on the Billing page to invite more.`,
+      );
+    }
+  }
 
   const inviteRole = formData.get("role") === "ADMIN" ? "ADMIN" : "AGENT";
 
@@ -71,6 +88,18 @@ export async function acceptInvite(
   });
   if (!invite || invite.usedAt || invite.expiresAt < new Date()) {
     return { error: "This invite link is no longer valid. Ask for a new one." };
+  }
+
+  // The plan may have filled up (or downgraded) since the invite was sent
+  const access = await getSubscriptionAccess(invite.organizationId);
+  const memberLimit = PLAN_LIMITS[access.planForLimits].teamMembers;
+  if (memberLimit !== null) {
+    const members = await prisma.membership.count({
+      where: { organizationId: invite.organizationId },
+    });
+    if (members >= memberLimit) {
+      return { error: "This team is full on its current plan. Ask the owner to upgrade first." };
+    }
   }
 
   const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });

@@ -1,6 +1,7 @@
 import { addHours, format } from "date-fns";
 import { prisma } from "./prisma";
 import { logger } from "./logger";
+import { deliverToChannel } from "./channels/deliver";
 
 export interface AutomationRunResult {
   remindersSent: number;
@@ -116,6 +117,9 @@ export async function runAutomations(orgId?: string): Promise<AutomationRunResul
           }),
         );
         await prisma.$transaction(ops);
+        if (conversation) {
+          await deliverToChannel(conversation.id, REMINDER_TEMPLATES[lang](when));
+        }
         result.remindersSent++;
       }
     }
@@ -152,12 +156,13 @@ export async function runAutomations(orgId?: string): Promise<AutomationRunResul
         if (alreadyFollowedUp) continue;
 
         const lang = conv.language in FOLLOWUP_TEMPLATES ? conv.language : "en";
+        const followUpText = FOLLOWUP_TEMPLATES[lang](conv.leads[0]?.interestedIn ?? null);
         await prisma.$transaction([
           prisma.message.create({
             data: {
               conversationId: conv.id,
               role: "AI",
-              content: FOLLOWUP_TEMPLATES[lang](conv.leads[0]?.interestedIn ?? null),
+              content: followUpText,
               metadata: { automation: "followup" },
             },
           }),
@@ -166,6 +171,9 @@ export async function runAutomations(orgId?: string): Promise<AutomationRunResul
             data: { updatedAt: now },
           }),
         ]);
+        // NOTE: outside WhatsApp's 24h service window Meta rejects free-form
+        // messages — this needs approved template messages to be reliable.
+        await deliverToChannel(conv.id, followUpText);
         result.followUpsSent++;
       }
     }

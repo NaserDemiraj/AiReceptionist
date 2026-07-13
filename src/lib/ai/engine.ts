@@ -65,6 +65,10 @@ export interface EngineResult {
 export async function processCustomerMessage(
   conversationId: string,
   text: string,
+  options?: {
+    /** Extra metadata stored on the customer message, e.g. { wamid } for WhatsApp dedupe. */
+    messageMetadata?: Record<string, string>;
+  },
 ): Promise<EngineResult> {
   const conversation = await prisma.conversation.findUniqueOrThrow({
     where: { id: conversationId },
@@ -90,7 +94,12 @@ export async function processCustomerMessage(
   const isFirstCustomerMessage = !conversation.messages.some((m) => m.role === "CUSTOMER");
 
   await prisma.message.create({
-    data: { conversationId, role: "CUSTOMER", content: text },
+    data: {
+      conversationId,
+      role: "CUSTOMER",
+      content: text,
+      ...(options?.messageMetadata ? { metadata: options.messageMetadata } : {}),
+    },
   });
 
   await prisma.conversation.update({
@@ -120,6 +129,15 @@ export async function processCustomerMessage(
     return { reply: null, products: [], status: conversation.status };
   }
   if (!config.isEnabled) {
+    return { reply: null, products: [], status: conversation.status };
+  }
+
+  // Plan gate: expired trial / cancelled subscription / monthly quota.
+  // The message is stored either way so nothing is lost after an upgrade.
+  const { checkAiUsage } = await import("@/lib/billing/plans");
+  const usage = await checkAiUsage(org.id);
+  if (!usage.allowed) {
+    logger.warn({ orgId: org.id, reason: usage.reason }, "AI reply blocked by plan");
     return { reply: null, products: [], status: conversation.status };
   }
 

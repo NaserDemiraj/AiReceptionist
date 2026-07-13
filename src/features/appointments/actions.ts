@@ -6,6 +6,11 @@ import type { AppointmentStatus } from "@prisma/client";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "@/lib/errors";
+import { dispatchWebhooks } from "@/lib/webhooks";
+import {
+  removeAppointmentFromCalendar,
+  syncAppointmentToCalendar,
+} from "@/lib/integrations/google-calendar";
 
 const STATUSES = ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED", "NO_SHOW"] as const;
 
@@ -34,6 +39,14 @@ export async function setAppointmentStatus(formData: FormData): Promise<void> {
       },
     }),
   ]);
+
+  // External sync — best-effort, after the status change is committed
+  if (status === "CANCELLED") {
+    await removeAppointmentFromCalendar(appointment.id);
+    await dispatchWebhooks(org.id, "appointment.cancelled", { appointmentId: appointment.id });
+  } else if (status === "CONFIRMED") {
+    await syncAppointmentToCalendar(appointment.id);
+  }
 
   revalidatePath("/appointments");
   revalidatePath("/dashboard");

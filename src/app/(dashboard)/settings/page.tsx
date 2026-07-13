@@ -2,6 +2,7 @@ import { Card } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/base-url";
 import { OrgProfileForm } from "@/features/settings/components/org-profile-form";
 import { WidgetSettingsForm } from "@/features/settings/components/widget-settings-form";
 import { RotateKeyButton } from "@/features/settings/components/rotate-key-button";
@@ -10,6 +11,7 @@ export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   const { org } = await requireOrg();
+  const baseUrl = await getBaseUrl();
   const config =
     (await prisma.aiConfig.findUnique({ where: { organizationId: org.id } })) ??
     (await prisma.aiConfig.create({ data: { organizationId: org.id } }));
@@ -43,7 +45,7 @@ export default async function SettingsPage() {
               Paste this one line on any website to put your AI receptionist on it:
             </p>
             <code className="block font-mono text-[11.5px] bg-hover border border-line rounded-lg px-3 py-2.5 select-all break-all mb-3">
-              {`<script src="https://YOUR-DOMAIN/widget.js" data-key="${org.widgetKey}" async></script>`}
+              {`<script src="${baseUrl}/widget.js" data-key="${org.widgetKey}" async></script>`}
             </code>
             <div className="flex items-center gap-3 mb-5">
               <RotateKeyButton />

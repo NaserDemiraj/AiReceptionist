@@ -67,6 +67,9 @@ model Organization {
   quotes          Quote[]
   site            Website?
   invites         Invite[]
+  channelIntegrations ChannelIntegration[]
+  googleCalendar   GoogleCalendarConnection?
+  webhookEndpoints WebhookEndpoint[]
 }
 
 model User {
@@ -345,6 +348,8 @@ model Appointment {
   notes          String?
   confirmationSentAt DateTime?
   reminderSentAt     DateTime?
+  // Google Calendar event id when the org has calendar sync connected
+  googleEventId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -400,9 +405,11 @@ model KnowledgeChunk {
   id       String @id @default(cuid())
   sourceId String
   content  String
-  // For FAQ entries: the question; embeddings (pgvector) added in a later migration
+  // For FAQ entries: the question
   heading  String?
   position Int    @default(0)
+  // pgvector embedding (OpenAI text-embedding-3-small); null = keyword-search only
+  embedding Unsupported("vector(1536)")?
 
   source KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
@@ -542,6 +549,79 @@ model Invite {
   expiresAt      DateTime
   usedAt         DateTime?
   usedByEmail    String?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+// ============================================================
+// Channel integrations — external messaging channels per org
+// (WhatsApp today; Messenger / Instagram / SMS reuse this model)
+// ============================================================
+
+enum ChannelIntegrationStatus {
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
+model ChannelIntegration {
+  id             String                   @id @default(cuid())
+  organizationId String
+  channel        Channel
+  status         ChannelIntegrationStatus @default(CONNECTED)
+  // Provider-side account id used to route inbound webhooks to the right
+  // tenant, e.g. the WhatsApp Business phone number ID
+  externalId String?
+  // Per-channel credential shape. WhatsApp:
+  // { phoneNumberId, accessToken, appSecret, verifyToken }
+  credentials    Json
+  lastError      String?
+  lastInboundAt  DateTime?
+  lastOutboundAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, channel])
+  @@unique([channel, externalId])
+  @@index([organizationId])
+}
+
+// One Google account connection per org — pushes appointments to Calendar
+model GoogleCalendarConnection {
+  id             String  @id @default(cuid())
+  organizationId String  @unique
+  email          String?
+  calendarId     String  @default("primary")
+  refreshToken   String
+  accessToken    String?
+  accessTokenExpiresAt DateTime?
+  lastError      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// Outbound webhooks — notify external systems (CRMs, Zapier, custom CMS)
+model WebhookEndpoint {
+  id             String   @id @default(cuid())
+  organizationId String
+  url            String
+  // Shared secret for the X-Webhook-Signature HMAC header
+  secret String
+  // Subscribed events, e.g. ["lead.created", "appointment.created"]
+  events      String[] @default([])
+  isActive    Boolean  @default(true)
+  lastStatus  Int?
+  lastFiredAt DateTime?
 
   createdAt DateTime @default(now())
 

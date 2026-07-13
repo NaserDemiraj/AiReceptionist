@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { dispatchWebhooks } from "@/lib/webhooks";
+import { syncAppointmentToCalendar } from "@/lib/integrations/google-calendar";
 import type { ToolDefinition } from "./provider";
 
 /** Everything a tool needs to act safely inside one tenant + conversation. */
@@ -317,6 +319,19 @@ async function captureLead(ctx: ToolContext, args: Record<string, unknown>): Pro
     },
   });
 
+  if (!existing) {
+    await dispatchWebhooks(ctx.orgId, "lead.created", {
+      leadId: lead.id,
+      name,
+      phone,
+      email,
+      interestedIn,
+      budget,
+      estimatedValue,
+      conversationId: ctx.conversationId,
+    });
+  }
+
   logger.info({ leadId: lead.id, orgId: ctx.orgId }, "lead captured by AI");
   return JSON.stringify({ ok: true, leadId: lead.id, message: "Lead saved. Thank the customer naturally." });
 }
@@ -423,6 +438,18 @@ async function bookAppointment(ctx: ToolContext, args: Record<string, unknown>):
     logger.warn({ err }, "booking confirmation email failed");
   }
 
+  // External sync — both best-effort, never block the booking
+  await syncAppointmentToCalendar(appointment.id);
+  await dispatchWebhooks(ctx.orgId, "appointment.created", {
+    appointmentId: appointment.id,
+    type,
+    startsAt: startsAt.toISOString(),
+    endsAt: endsAt.toISOString(),
+    customerName,
+    phone,
+    conversationId: ctx.conversationId,
+  });
+
   logger.info({ appointmentId: appointment.id, orgId: ctx.orgId }, "appointment booked by AI");
   return JSON.stringify({
     ok: true,
@@ -433,6 +460,22 @@ async function bookAppointment(ctx: ToolContext, args: Record<string, unknown>):
 
 async function searchKnowledge(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
   const query = typeof args.query === "string" ? args.query : "";
+
+  // Semantic search first (understands paraphrases and other languages);
+  // falls back to keyword scoring when embeddings aren't configured.
+  const { semanticSearch } = await import("./embeddings");
+  const semantic = await semanticSearch(ctx.orgId, query);
+  if (semantic && semantic.length > 0) {
+    return JSON.stringify({
+      found: semantic.length,
+      entries: semantic.map((hit) => ({
+        source: hit.sourceTitle,
+        heading: hit.heading ?? undefined,
+        content: hit.content,
+      })),
+    });
+  }
+
   const terms = [
     ...new Set(
       query
@@ -514,6 +557,10 @@ async function requestHuman(ctx: ToolContext, args: Record<string, unknown>): Pr
       body: reason,
       payload: { conversationId: ctx.conversationId },
     },
+  });
+  await dispatchWebhooks(ctx.orgId, "conversation.needs_human", {
+    conversationId: ctx.conversationId,
+    reason,
   });
 
   return JSON.stringify({

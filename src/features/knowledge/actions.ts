@@ -6,6 +6,7 @@ import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { notFound } from "@/lib/errors";
+import { embedSourceChunks } from "@/lib/ai/embeddings";
 import { htmlToText, splitIntoChunks } from "./chunking";
 
 export type KnowledgeFormState = { error?: string; success?: string } | undefined;
@@ -28,7 +29,7 @@ export async function addFaq(
   const parsed = faqSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  await prisma.knowledgeSource.create({
+  const source = await prisma.knowledgeSource.create({
     data: {
       organizationId: org.id,
       type: "FAQ",
@@ -44,6 +45,7 @@ export async function addFaq(
       },
     },
   });
+  await embedSourceChunks(source.id);
 
   revalidatePath("/knowledge");
   return { success: "FAQ added — the AI can use it immediately." };
@@ -65,7 +67,7 @@ export async function addText(
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const chunks = splitIntoChunks(parsed.data.content);
-  await prisma.knowledgeSource.create({
+  const source = await prisma.knowledgeSource.create({
     data: {
       organizationId: org.id,
       type: "MANUAL",
@@ -81,6 +83,7 @@ export async function addText(
       },
     },
   });
+  await embedSourceChunks(source.id);
 
   revalidatePath("/knowledge");
   return { success: `Document indexed into ${chunks.length} section${chunks.length === 1 ? "" : "s"}.` };
@@ -137,6 +140,7 @@ export async function addUrl(
         },
       }),
     ]);
+    await embedSourceChunks(source.id);
 
     revalidatePath("/knowledge");
     return { success: `Page indexed into ${chunks.length} section${chunks.length === 1 ? "" : "s"}.` };
@@ -199,6 +203,7 @@ export async function addPdf(
         data: { status: "READY", lastIndexedAt: new Date() },
       }),
     ]);
+    await embedSourceChunks(source.id);
 
     revalidatePath("/knowledge");
     return { success: `PDF indexed into ${chunks.length} section${chunks.length === 1 ? "" : "s"}.` };

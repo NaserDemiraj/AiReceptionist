@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "@/lib/errors";
+import { deliverToChannel } from "@/lib/channels/deliver";
 
 async function ownedConversation(conversationId: string) {
   const { org, user } = await requireOrg();
@@ -42,6 +43,9 @@ export async function sendAgentReply(formData: FormData): Promise<void> {
       data: { status: "HUMAN_ACTIVE" },
     }),
   ]);
+
+  // Push the reply out to external channels (WhatsApp etc.); no-op for web.
+  await deliverToChannel(conversation.id, text.trim());
 
   revalidatePath("/conversations");
 }
