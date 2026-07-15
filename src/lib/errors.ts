@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { logger } from "./logger";
+import { captureError } from "./sentry";
 
 /** Application error with an HTTP status and a stable machine-readable code. */
 export class AppError extends Error {
@@ -32,7 +33,13 @@ export function errorResponse(err: unknown): NextResponse {
       { status: 422 },
     );
   }
+  // Capture unhandled errors to Sentry
   logger.error({ err }, "unhandled API error");
+  if (err instanceof Error) {
+    captureError(err, { context: "api_handler" }, "error");
+  } else {
+    captureError(String(err), { context: "api_handler" }, "error");
+  }
   return NextResponse.json(
     { error: { code: "internal_error", message: "Something went wrong" } },
     { status: 500 },

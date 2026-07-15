@@ -1,6 +1,7 @@
 import type { AiConfig, Organization } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { captureError } from "@/lib/sentry";
 import { detectLanguage, detectSentiment } from "./language";
 import { getProvider, type ChatMessage } from "./provider";
 import { TOOL_DEFINITIONS, executeTool, type ProductCard, type ToolContext } from "./tools";
@@ -179,28 +180,46 @@ export async function processCustomerMessage(
   const toolsUsed: string[] = [];
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-    const result = await provider.chat(messages, {
-      model: config.model,
-      temperature: config.temperature,
-      tools: TOOL_DEFINITIONS,
-    });
-
-    if (result.finishReason === "tool_calls" && result.toolCalls.length > 0) {
-      messages.push({
-        role: "assistant",
-        content: result.content ?? "",
-        toolCalls: result.toolCalls,
+    try {
+      const result = await provider.chat(messages, {
+        model: config.model,
+        temperature: config.temperature,
+        tools: TOOL_DEFINITIONS,
       });
-      for (const call of result.toolCalls) {
-        toolsUsed.push(call.name);
-        const output = await executeTool(ctx, call.name, call.arguments);
-        messages.push({ role: "tool", content: output, toolCallId: call.id });
-      }
-      continue;
-    }
 
-    reply = result.content;
-    break;
+      if (result.finishReason === "tool_calls" && result.toolCalls.length > 0) {
+        messages.push({
+          role: "assistant",
+          content: result.content ?? "",
+          toolCalls: result.toolCalls,
+        });
+        for (const call of result.toolCalls) {
+          toolsUsed.push(call.name);
+          const output = await executeTool(ctx, call.name, call.arguments);
+          messages.push({ role: "tool", content: output, toolCallId: call.id });
+        }
+        continue;
+      }
+
+      reply = result.content;
+      break;
+    } catch (err) {
+      captureError(err instanceof Error ? err : new Error(String(err)), {
+        context: "ai_engine_llm_call",
+        conversationId,
+        round,
+        model: config.model,
+      });
+      logger.error({ err, conversationId, round }, "LLM call failed");
+      if (round === 0) {
+        reply = language === "sq"
+          ? "Më falni, pata një problem me përgjigjen. Një koleg do t'ju përgjigjet shumë shpejt!"
+          : language === "de"
+            ? "Entschuldigung, es gab ein Problem bei der Antwort. Ein Kollege hilft Ihnen gleich weiter!"
+            : "Sorry, I couldn't process that. A team member will help shortly!";
+      }
+      break;
+    }
   }
 
   if (!reply) {
