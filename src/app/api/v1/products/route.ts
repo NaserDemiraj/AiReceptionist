@@ -115,57 +115,116 @@ export async function POST(req: NextRequest) {
     const items = Array.isArray(parsed) ? parsed : [parsed];
     const now = new Date();
 
-    const results: Array<{ externalId: string; id: string; action: "created" | "updated" }> = [];
-
+    // 1. Resolve categories in bulk — created on first use so CMSs don't pre-register them
+    const categoryNames = new Map<string, string>(); // slug → name (first occurrence wins)
     for (const item of items) {
-      // Category by name — created on first use so CMSs don't pre-register them
-      let categoryId: string | null = null;
       if (item.category) {
-        const category = await prisma.productCategory.upsert({
-          where: { organizationId_slug: { organizationId: orgId, slug: slugify(item.category) } },
-          create: { organizationId: orgId, name: item.category, slug: slugify(item.category) },
-          update: {},
-        });
-        categoryId = category.id;
+        const slug = slugify(item.category);
+        if (!categoryNames.has(slug)) categoryNames.set(slug, item.category);
       }
-
-      const data = {
-        name: item.name,
-        description: item.description ?? null,
-        sku: item.sku ?? null,
-        categoryId,
-        price: item.price,
-        salePrice: item.salePrice ?? null,
-        ...(item.currency ? { currency: item.currency.toUpperCase() } : {}),
-        stock: item.stock ?? 0,
-        dimensions: item.dimensions ?? undefined,
-        materials: item.materials ?? [],
-        colors: item.colors ?? [],
-        style: item.style ?? null,
-        images: item.images ?? [],
-        deliveryDays: item.deliveryDays ?? null,
-        warrantyMonths: item.warrantyMonths ?? null,
-        isActive: item.isActive ?? true,
-        lastSyncedAt: now,
-      };
-
-      const existing = await prisma.product.findUnique({
-        where: { organizationId_externalId: { organizationId: orgId, externalId: item.externalId } },
-        select: { id: true },
+    }
+    const categoryIdBySlug = new Map<string, string>();
+    if (categoryNames.size > 0) {
+      const slugs = [...categoryNames.keys()];
+      const existing = await prisma.productCategory.findMany({
+        where: { organizationId: orgId, slug: { in: slugs } },
+        select: { id: true, slug: true },
       });
-      const product = existing
-        ? await prisma.product.update({ where: { id: existing.id }, data })
-        : await prisma.product.create({
-            data: { ...data, organizationId: orgId, externalId: item.externalId },
-          });
-      results.push({
-        externalId: item.externalId,
-        id: product.id,
-        action: existing ? "updated" : "created",
-      });
+      for (const c of existing) categoryIdBySlug.set(c.slug, c.id);
+
+      const missing = slugs.filter((s) => !categoryIdBySlug.has(s));
+      if (missing.length > 0) {
+        await prisma.productCategory.createMany({
+          data: missing.map((slug) => ({
+            organizationId: orgId,
+            name: categoryNames.get(slug)!,
+            slug,
+          })),
+          skipDuplicates: true,
+        });
+        const created = await prisma.productCategory.findMany({
+          where: { organizationId: orgId, slug: { in: missing } },
+          select: { id: true, slug: true },
+        });
+        for (const c of created) categoryIdBySlug.set(c.slug, c.id);
+      }
     }
 
-    logger.info({ orgId, count: results.length }, "products synced via API");
+    // 2. One lookup for all existing products by externalId
+    const externalIds = items.map((i) => i.externalId);
+    const existingProducts = await prisma.product.findMany({
+      where: { organizationId: orgId, externalId: { in: externalIds } },
+      select: { id: true, externalId: true },
+    });
+    const existingByExternalId = new Map(existingProducts.map((p) => [p.externalId!, p.id]));
+
+    const toData = (item: (typeof items)[number]) => ({
+      name: item.name,
+      description: item.description ?? null,
+      sku: item.sku ?? null,
+      categoryId: item.category ? (categoryIdBySlug.get(slugify(item.category)) ?? null) : null,
+      price: item.price,
+      salePrice: item.salePrice ?? null,
+      ...(item.currency ? { currency: item.currency.toUpperCase() } : {}),
+      stock: item.stock ?? 0,
+      dimensions: item.dimensions ?? undefined,
+      materials: item.materials ?? [],
+      colors: item.colors ?? [],
+      style: item.style ?? null,
+      images: item.images ?? [],
+      deliveryDays: item.deliveryDays ?? null,
+      warrantyMonths: item.warrantyMonths ?? null,
+      isActive: item.isActive ?? true,
+      lastSyncedAt: now,
+    });
+
+    // 3. Bulk-create the new ones, batch-update the existing ones in one transaction
+    const creates = items.filter((i) => !existingByExternalId.has(i.externalId));
+    const updates = items.filter((i) => existingByExternalId.has(i.externalId));
+
+    if (creates.length > 0) {
+      await prisma.product.createMany({
+        data: creates.map((item) => ({
+          ...toData(item),
+          organizationId: orgId,
+          externalId: item.externalId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+    if (updates.length > 0) {
+      await prisma.$transaction(
+        updates.map((item) =>
+          prisma.product.update({
+            where: { id: existingByExternalId.get(item.externalId)! },
+            data: toData(item),
+          }),
+        ),
+      );
+    }
+
+    // Fetch ids of newly created products for the response
+    const createdProducts = creates.length
+      ? await prisma.product.findMany({
+          where: { organizationId: orgId, externalId: { in: creates.map((i) => i.externalId) } },
+          select: { id: true, externalId: true },
+        })
+      : [];
+    const createdByExternalId = new Map(createdProducts.map((p) => [p.externalId!, p.id]));
+
+    const results = items.map((item) => {
+      const existingId = existingByExternalId.get(item.externalId);
+      return {
+        externalId: item.externalId,
+        id: existingId ?? createdByExternalId.get(item.externalId) ?? "",
+        action: (existingId ? "updated" : "created") as "created" | "updated",
+      };
+    });
+
+    logger.info(
+      { orgId, count: results.length, created: creates.length, updated: updates.length },
+      "products synced via API",
+    );
     return NextResponse.json({ synced: results.length, results });
   } catch (err) {
     return errorResponse(err);
