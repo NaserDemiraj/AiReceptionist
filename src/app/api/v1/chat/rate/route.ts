@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = rateSchema.parse(await req.json());
 
-    if (!rateLimit(`rate:${body.widgetKey}:${body.visitorId}`, 10, 60_000).allowed) {
+    if (!(await rateLimit(`rate:${body.widgetKey}:${body.visitorId}`, 10, 60_000)).allowed) {
       throw new AppError("Too many requests.", 429, "rate_limited");
     }
 

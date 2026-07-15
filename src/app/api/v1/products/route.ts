@@ -54,7 +54,7 @@ function slugify(name: string): string {
 export async function GET(req: NextRequest) {
   try {
     const { orgId } = await authenticateApiKey(req);
-    if (!rateLimit(`api:${orgId}`, 120, 60_000).allowed) {
+    if (!(await rateLimit(`api:${orgId}`, 120, 60_000)).allowed) {
       throw new AppError("Rate limit exceeded", 429, "rate_limited");
     }
 
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { orgId } = await authenticateApiKey(req);
-    if (!rateLimit(`api:${orgId}`, 120, 60_000).allowed) {
+    if (!(await rateLimit(`api:${orgId}`, 120, 60_000)).allowed) {
       throw new AppError("Rate limit exceeded", 429, "rate_limited");
     }
 

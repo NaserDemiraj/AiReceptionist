@@ -125,7 +125,8 @@ export async function submitContactForm(
 
   const hdrs = await headers();
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0] ?? "local";
-  if (!rateLimit(`contact:${ip}`, 5, 10 * 60_000).allowed) {
+  const rateLimitResult = await rateLimit(`contact:${ip}`, 5, 10 * 60_000);
+  if (!rateLimitResult.allowed) {
     return { error: "Too many messages — please try again later." };
   }
 

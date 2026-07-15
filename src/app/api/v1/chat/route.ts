@@ -29,10 +29,10 @@ export async function POST(req: NextRequest) {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "local";
     const body = postSchema.parse(await req.json());
 
-    if (!rateLimit(`chat:${body.widgetKey}:${body.visitorId}`, 20, 60_000).allowed) {
+    if (!(await rateLimit(`chat:${body.widgetKey}:${body.visitorId}`, 20, 60_000)).allowed) {
       throw new AppError("Too many messages — please slow down.", 429, "rate_limited");
     }
-    if (!rateLimit(`chat-ip:${ip}`, 60, 60_000).allowed) {
+    if (!(await rateLimit(`chat-ip:${ip}`, 60, 60_000)).allowed) {
       throw new AppError("Too many requests.", 429, "rate_limited");
     }
 
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
     const conversationId = url.searchParams.get("conversationId") ?? "";
     const after = url.searchParams.get("after");
 
-    if (!rateLimit(`chat-poll:${widgetKey}:${visitorId}`, 60, 60_000).allowed) {
+    if (!(await rateLimit(`chat-poll:${widgetKey}:${visitorId}`, 60, 60_000)).allowed) {
       throw new AppError("Too many requests.", 429, "rate_limited");
     }
 

@@ -125,7 +125,8 @@ export async function requestPasswordReset(
   const { headers } = await import("next/headers");
   const { rateLimit } = await import("@/lib/rate-limit");
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0] ?? "local";
-  if (!rateLimit(`pwreset:${ip}`, 5, 15 * 60_000).allowed) {
+  const rateLimitResult = await rateLimit(`pwreset:${ip}`, 5, 15 * 60_000);
+  if (!rateLimitResult.allowed) {
     return { error: "Too many attempts — try again later." };
   }
 
