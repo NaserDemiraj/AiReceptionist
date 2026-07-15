@@ -1,6 +1,14 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "../prisma";
 import { logger } from "../logger";
+import {
+  fetchWithTimeout,
+  isCircuitOpen,
+  recordFailure,
+  recordSuccess,
+} from "../circuit-breaker";
+
+const BREAKER = "google-calendar";
 
 /**
  * Google Calendar sync — one connected Google account per org.
@@ -67,8 +75,10 @@ export async function exchangeGoogleCode(
   code: string,
   redirectUri: string,
 ): Promise<GoogleTokens | null> {
-  const res = await fetch(TOKEN_URL, {
+  // User-interactive connect flow: no breaker, but never hang the callback
+  const res = await fetchWithTimeout(TOKEN_URL, {
     method: "POST",
+    timeoutMs: 10_000,
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code,
@@ -119,8 +129,9 @@ async function getValidAccessToken(orgId: string): Promise<{ token: string; cale
     conn.accessTokenExpiresAt.getTime() > Date.now() + 60_000;
   if (stillValid) return { token: conn.accessToken!, calendarId: conn.calendarId };
 
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchWithTimeout(TOKEN_URL, {
     method: "POST",
+    timeoutMs: 10_000,
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       refresh_token: conn.refreshToken,
@@ -162,6 +173,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export async function syncAppointmentToCalendar(appointmentId: string): Promise<void> {
+  if (isCircuitOpen(BREAKER)) return; // Google is having a bad time — skip, stay fast
   try {
     const appt = await prisma.appointment.findUnique({
       where: { id: appointmentId },
@@ -187,8 +199,9 @@ export async function syncAppointmentToCalendar(appointmentId: string): Promise<
 
     const base = `${CALENDAR_BASE}/calendars/${encodeURIComponent(access.calendarId)}/events`;
     const url = appt.googleEventId ? `${base}/${appt.googleEventId}` : base;
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: appt.googleEventId ? "PATCH" : "POST",
+      timeoutMs: 10_000,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${access.token}`,
@@ -197,8 +210,10 @@ export async function syncAppointmentToCalendar(appointmentId: string): Promise<
     });
     if (!res.ok) {
       logger.warn({ status: res.status, appointmentId }, "calendar event sync failed");
+      if (res.status >= 500 || res.status === 429) recordFailure(BREAKER);
       return;
     }
+    recordSuccess(BREAKER);
     const data = (await res.json()) as { id?: string };
     if (!appt.googleEventId && data.id) {
       await prisma.appointment.update({
@@ -208,6 +223,7 @@ export async function syncAppointmentToCalendar(appointmentId: string): Promise<
     }
   } catch (err) {
     logger.warn({ err, appointmentId }, "calendar sync threw");
+    recordFailure(BREAKER);
   }
 }
 
@@ -218,18 +234,21 @@ export async function removeAppointmentFromCalendar(appointmentId: string): Prom
       select: { organizationId: true, googleEventId: true },
     });
     if (!appt?.googleEventId) return;
+    if (isCircuitOpen(BREAKER)) return;
     const access = await getValidAccessToken(appt.organizationId);
     if (!access) return;
 
-    await fetch(
+    await fetchWithTimeout(
       `${CALENDAR_BASE}/calendars/${encodeURIComponent(access.calendarId)}/events/${appt.googleEventId}`,
-      { method: "DELETE", headers: { Authorization: `Bearer ${access.token}` } },
+      { method: "DELETE", timeoutMs: 10_000, headers: { Authorization: `Bearer ${access.token}` } },
     );
+    recordSuccess(BREAKER);
     await prisma.appointment.update({
       where: { id: appointmentId },
       data: { googleEventId: null },
     });
   } catch (err) {
     logger.warn({ err, appointmentId }, "calendar event delete threw");
+    recordFailure(BREAKER);
   }
 }

@@ -1,6 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { logger } from "../logger";
+import {
+  fetchWithTimeout,
+  isCircuitOpen,
+  recordFailure,
+  recordSuccess,
+} from "../circuit-breaker";
 
 /**
  * Knowledge embeddings via OpenAI text-embedding-3-small (1536 dims).
@@ -16,13 +22,18 @@ export function isEmbeddingsConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
+const BREAKER = "openai-embeddings";
+
 export async function embedTexts(texts: string[]): Promise<number[][] | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || texts.length === 0) return null;
+  // Sits in the chat hot path (semanticSearch) — skip instantly while OpenAI is down
+  if (isCircuitOpen(BREAKER)) return null;
 
   try {
-    const res = await fetch(EMBEDDINGS_URL, {
+    const res = await fetchWithTimeout(EMBEDDINGS_URL, {
       method: "POST",
+      timeoutMs: 8_000,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
@@ -35,13 +46,17 @@ export async function embedTexts(texts: string[]): Promise<number[][] | null> {
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       logger.warn({ status: res.status, body: body.slice(0, 200) }, "embeddings request failed");
+      // 5xx = provider trouble; 4xx (bad key, quota) shouldn't trip the breaker
+      if (res.status >= 500 || res.status === 429) recordFailure(BREAKER);
       return null;
     }
     const data = (await res.json()) as { data?: Array<{ index: number; embedding: number[] }> };
     if (!data.data || data.data.length !== texts.length) return null;
+    recordSuccess(BREAKER);
     return data.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
   } catch (err) {
     logger.error({ err }, "embeddings request threw");
+    recordFailure(BREAKER);
     return null;
   }
 }
