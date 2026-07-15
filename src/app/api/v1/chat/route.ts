@@ -4,12 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { errorResponse, AppError } from "@/lib/errors";
 import { processCustomerMessage } from "@/lib/ai/engine";
+import { getPublicCorsHeaders } from "@/lib/cors";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+const CORS_HEADERS = getPublicCorsHeaders();
+// Public widget endpoint: rate-limited by IP + widgetKey, no sensitive data exposed
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });

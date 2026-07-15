@@ -3,12 +3,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { errorResponse, AppError } from "@/lib/errors";
+import { getPublicCorsHeaders } from "@/lib/cors";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+const CORS_HEADERS = getPublicCorsHeaders();
+// Public widget endpoint: customer feedback ratings, rate-limited per visitor
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });

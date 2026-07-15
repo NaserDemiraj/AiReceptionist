@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { errorResponse, AppError } from "@/lib/errors";
+import { getPublicCorsHeaders } from "@/lib/cors";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-};
+const CORS_HEADERS = getPublicCorsHeaders();
+// Public widget endpoint: returns non-sensitive config (colors, position)
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
