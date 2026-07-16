@@ -1,6 +1,6 @@
 "use server";
 
-import { hash } from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -73,9 +73,80 @@ export async function signup(
 
   logger.info({ email: email.toLowerCase(), org: businessName }, "new signup");
 
+  // Best-effort: verification email — signup must never fail on email trouble
+  try {
+    await sendVerificationEmail(email.toLowerCase());
+  } catch (err) {
+    logger.warn({ err, email: email.toLowerCase() }, "verification email failed to send");
+  }
+
   // Establish the session, then send them to the dashboard
   await signIn("credentials", { email, password, redirect: false });
   redirect("/dashboard");
+}
+
+/* ---------- Email verification ---------- */
+
+async function sendVerificationEmail(emailAddress: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email: emailAddress } });
+  if (!user || user.emailVerifiedAt) return;
+
+  const token = await prisma.emailVerificationToken.create({
+    data: { userId: user.id, expiresAt: new Date(Date.now() + 24 * 60 * 60_000) },
+  });
+
+  const { getBaseUrl } = await import("@/lib/base-url");
+  const link = `${await getBaseUrl()}/verify-email/${token.token}`;
+
+  const { sendEmail, emailLayout } = await import("@/lib/email");
+  await sendEmail({
+    to: user.email,
+    subject: "Confirm your email — AI Receptionist",
+    html: emailLayout(
+      "Confirm your email",
+      `<p>Hi ${user.name},</p>
+       <p>Click the button below to confirm this email address. The link is valid for 24 hours.</p>
+       <p style="margin:24px 0;"><a href="${link}" style="background:#5B57D4;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:bold;">Confirm email</a></p>
+       <p style="color:#9A9AA5;font-size:12px;">If you didn't create an account, you can safely ignore this email.</p>`,
+    ),
+  });
+}
+
+/** Resend the verification email for the signed-in user (dashboard banner). */
+export async function resendVerificationEmail(): Promise<{ sent?: boolean; error?: string }> {
+  const { requireOrg } = await import("@/lib/org");
+  const { user } = await requireOrg();
+  if (user.emailVerifiedAt) return { sent: true };
+
+  const { rateLimit } = await import("@/lib/rate-limit");
+  const attempt = await rateLimit(`verify-resend:${user.id}`, 3, 15 * 60_000);
+  if (!attempt.allowed) return { error: "Too many attempts — try again in a few minutes." };
+
+  try {
+    await sendVerificationEmail(user.email);
+    return { sent: true };
+  } catch (err) {
+    logger.warn({ err, email: user.email }, "verification email resend failed");
+    return { error: "Couldn't send the email — try again later." };
+  }
+}
+
+export async function verifyEmailToken(rawToken: string): Promise<"verified" | "expired" | "invalid"> {
+  if (!rawToken) return "invalid";
+  const token = await prisma.emailVerificationToken.findUnique({
+    where: { token: rawToken },
+    include: { user: { select: { id: true, email: true, emailVerifiedAt: true } } },
+  });
+  if (!token) return "invalid";
+  if (token.user.emailVerifiedAt) return "verified"; // already done — treat as success
+  if (token.usedAt || token.expiresAt < new Date()) return "expired";
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: token.userId }, data: { emailVerifiedAt: new Date() } }),
+    prisma.emailVerificationToken.update({ where: { id: token.id }, data: { usedAt: new Date() } }),
+  ]);
+  logger.info({ email: token.user.email }, "email verified");
+  return "verified";
 }
 
 const loginSchema = z.object({
@@ -111,6 +182,43 @@ export async function logout() {
   const { signOut } = await import("@/lib/auth");
   await signOut({ redirect: false });
   redirect("/login");
+}
+
+/* ---------- Password change (logged-in) ---------- */
+
+const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Enter your current password"),
+    newPassword: z.string().min(8, "New password must be at least 8 characters"),
+    confirmPassword: z.string().min(1, "Confirm the new password"),
+  })
+  .refine((d) => d.newPassword === d.confirmPassword, {
+    message: "New passwords don't match",
+    path: ["confirmPassword"],
+  });
+
+export async function changePassword(
+  _prev: (AuthFormState & { success?: boolean }) | undefined,
+  formData: FormData,
+): Promise<AuthFormState & { success?: boolean }> {
+  const { requireOrg } = await import("@/lib/org");
+  const { user } = await requireOrg();
+
+  const parsed = changePasswordSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const { rateLimit } = await import("@/lib/rate-limit");
+  const attempt = await rateLimit(`pwchange:${user.id}`, 5, 15 * 60_000);
+  if (!attempt.allowed) return { error: "Too many attempts — try again later." };
+
+  const ok = await compare(parsed.data.currentPassword, user.passwordHash);
+  if (!ok) return { error: "Current password is wrong." };
+
+  const passwordHash = await hash(parsed.data.newPassword, 12);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+
+  logger.info({ email: user.email }, "password changed");
+  return { success: true };
 }
 
 /* ---------- Password reset ---------- */

@@ -6,6 +6,7 @@ import { getBaseUrl } from "@/lib/base-url";
 import { OrgProfileForm } from "@/features/settings/components/org-profile-form";
 import { WidgetSettingsForm } from "@/features/settings/components/widget-settings-form";
 import { RotateKeyButton } from "@/features/settings/components/rotate-key-button";
+import { ChangePasswordForm } from "@/features/settings/components/change-password-form";
 
 export const metadata = { title: "Settings" };
 
@@ -60,6 +61,14 @@ export default async function SettingsPage() {
                 showBranding: config.showBranding,
               }}
             />
+          </Card>
+
+          <Card className="p-6">
+            <h2 className="text-[15px] font-semibold mb-1">Password</h2>
+            <p className="text-[12.5px] text-ink-mid mb-5">
+              Change the password you use to sign in.
+            </p>
+            <ChangePasswordForm />
           </Card>
         </div>
       </div>

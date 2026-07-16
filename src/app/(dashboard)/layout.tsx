@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Sidebar } from "@/components/layout/sidebar";
+import { VerifyEmailBanner } from "@/features/settings/components/verify-email-banner";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import {
@@ -91,6 +92,7 @@ export default async function DashboardLayout({
             </Link>
           </div>
         )}
+        {!user.emailVerifiedAt && <VerifyEmailBanner email={user.email} />}
         {children}
       </main>
     </div>
