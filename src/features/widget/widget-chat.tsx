@@ -60,15 +60,17 @@ export function WidgetChat({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string>("AI_ACTIVE");
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  // Lazy init: resumes the visitor's saved conversation. Renders identically
+  // to the server's null until messages load, so hydration stays clean.
+  const [conversationId, setConversationId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : localStorage.getItem(`air_conv_${widgetKey}`),
+  );
   const [rated, setRated] = useState<1 | -1 | null>(null);
   const visitorIdRef = useRef<string>("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     visitorIdRef.current = getVisitorId();
-    const saved = localStorage.getItem(`air_conv_${widgetKey}`);
-    if (saved) setConversationId(saved);
   }, [widgetKey]);
 
   const refresh = useCallback(async () => {

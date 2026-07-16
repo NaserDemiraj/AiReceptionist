@@ -11,6 +11,7 @@ import { parseWhatsAppCredentials, sendWhatsAppText } from "@/lib/channels/whats
 import { twilioCredentialsSchema } from "@/lib/channels/twilio";
 import { parseMessengerCredentials } from "@/lib/channels/messenger";
 import { generateApiKey } from "@/lib/api-auth";
+import { sealCredentials } from "@/lib/credentials-crypto";
 import { WEBHOOK_EVENTS, type WebhookEvent } from "@/lib/webhooks";
 import { getSubscriptionAccess, isChannelAllowed, PLAN_LIMITS } from "@/lib/billing/plans";
 
@@ -65,7 +66,7 @@ export async function connectWhatsApp(
     parseWhatsAppCredentials(existing?.credentials)?.verifyToken ??
     `vt_${randomUUID().replace(/-/g, "")}`;
 
-  const credentials = { ...d, verifyToken };
+  const credentials = sealCredentials({ ...d, verifyToken }) as object;
 
   try {
     await prisma.$transaction([
@@ -154,6 +155,7 @@ export async function connectTwilio(
     forwardTo: (formData.get("forwardTo") as string | null)?.trim(),
   });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const twilioCredentials = sealCredentials(parsed.data) as object;
 
   try {
     await prisma.$transaction([
@@ -163,10 +165,10 @@ export async function connectTwilio(
           organizationId: org.id,
           channel: "SMS",
           externalId: parsed.data.phoneNumber,
-          credentials: parsed.data,
+          credentials: twilioCredentials,
           status: "CONNECTED",
         },
-        update: { externalId: parsed.data.phoneNumber, credentials: parsed.data, status: "CONNECTED", lastError: null },
+        update: { externalId: parsed.data.phoneNumber, credentials: twilioCredentials, status: "CONNECTED", lastError: null },
       }),
       prisma.auditLog.create({
         data: {
@@ -222,6 +224,7 @@ export async function connectMessenger(
   const verifyToken =
     parseMessengerCredentials(existing?.credentials)?.verifyToken ??
     `vt_${randomUUID().replace(/-/g, "")}`;
+  const messengerCredentials = sealCredentials({ ...creds, verifyToken }) as object;
 
   try {
     await prisma.$transaction([
@@ -231,12 +234,12 @@ export async function connectMessenger(
           organizationId: org.id,
           channel,
           externalId: creds.pageId,
-          credentials: { ...creds, verifyToken },
+          credentials: messengerCredentials,
           status: "CONNECTED",
         },
         update: {
           externalId: creds.pageId,
-          credentials: { ...creds, verifyToken },
+          credentials: messengerCredentials,
           status: "CONNECTED",
           lastError: null,
         },

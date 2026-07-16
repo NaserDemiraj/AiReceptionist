@@ -26,7 +26,7 @@ export default function TermsPage() {
       <ul>
         <li>No unlawful, deceptive, or harmful content or activity.</li>
         <li>No attempts to breach, overload, or reverse-engineer the service.</li>
-        <li>No sending of spam through the platform's messaging features.</li>
+        <li>No sending of spam through the platform&apos;s messaging features.</li>
       </ul>
 
       <h2>Data</h2>

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { logger } from "../logger";
+import { openCredentials } from "../credentials-crypto";
 
 /**
  * WhatsApp Business Cloud API client (plain fetch, Graph API).
@@ -25,7 +26,7 @@ export const whatsAppCredentialsSchema = z.object({
 export type WhatsAppCredentials = z.infer<typeof whatsAppCredentialsSchema>;
 
 export function parseWhatsAppCredentials(json: unknown): WhatsAppCredentials | null {
-  const parsed = whatsAppCredentialsSchema.safeParse(json);
+  const parsed = whatsAppCredentialsSchema.safeParse(openCredentials(json));
   return parsed.success ? parsed.data : null;
 }
 

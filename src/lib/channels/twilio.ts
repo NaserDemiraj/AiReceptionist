@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { logger } from "../logger";
+import { openCredentials } from "../credentials-crypto";
 
 /**
  * Twilio client for the phone/SMS channel (plain fetch).
@@ -20,7 +21,7 @@ export const twilioCredentialsSchema = z.object({
 export type TwilioCredentials = z.infer<typeof twilioCredentialsSchema>;
 
 export function parseTwilioCredentials(json: unknown): TwilioCredentials | null {
-  const parsed = twilioCredentialsSchema.safeParse(json);
+  const parsed = twilioCredentialsSchema.safeParse(openCredentials(json));
   return parsed.success ? parsed.data : null;
 }
 

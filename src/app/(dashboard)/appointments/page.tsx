@@ -22,11 +22,15 @@ function dayLabel(d: Date): string {
   return format(d, "EEEE, MMM d");
 }
 
+function yesterday(): Date {
+  return new Date(Date.now() - 24 * 3600 * 1000);
+}
+
 export default async function AppointmentsPage() {
   const { org } = await requireOrg();
 
   const appointments = await prisma.appointment.findMany({
-    where: { organizationId: org.id, startsAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) } },
+    where: { organizationId: org.id, startsAt: { gte: yesterday() } },
     orderBy: { startsAt: "asc" },
     take: 100,
     include: { customer: true, staff: true },

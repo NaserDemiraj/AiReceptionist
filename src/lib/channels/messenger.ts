@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { logger } from "../logger";
+import { openCredentials } from "../credentials-crypto";
 import { verifyWebhookSignature } from "./whatsapp";
 
 /**
@@ -26,7 +27,7 @@ export const messengerCredentialsSchema = z.object({
 export type MessengerCredentials = z.infer<typeof messengerCredentialsSchema>;
 
 export function parseMessengerCredentials(json: unknown): MessengerCredentials | null {
-  const parsed = messengerCredentialsSchema.safeParse(json);
+  const parsed = messengerCredentialsSchema.safeParse(openCredentials(json));
   return parsed.success ? parsed.data : null;
 }
 

@@ -26,7 +26,7 @@ if (typeof window === "undefined" && serverDsn) {
  */
 export function captureError(
   error: Error | string,
-  context?: Record<string, any>,
+  context?: Record<string, unknown>,
   level: "error" | "warning" | "info" = "error"
 ) {
   const message = typeof error === "string" ? error : error.message;

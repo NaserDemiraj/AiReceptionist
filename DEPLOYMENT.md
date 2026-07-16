@@ -85,7 +85,8 @@ Prisma migrations are forward-only — there is no automatic "down" migration. P
   falls back to in-memory, which only protects a single instance.
 - **WhatsApp follow-ups outside the 24h window** need approved template
   messages; free-form sends are rejected by Meta.
-- **Channel credentials are stored unencrypted** in Postgres — add
-  application-level encryption (e.g. AES-GCM with a KMS key) before SOC2/enterprise sales.
+- **Channel credentials are encrypted at rest** (AES-256-GCM) when
+  `CREDENTIALS_ENCRYPTION_KEY` is set — set it before onboarding customers and
+  back the key up; losing it means businesses must reconnect their channels.
 - Webhook processing (LLM reply) runs inside the request — keep Vercel
   function `maxDuration` ≥ 30s for chat/webhook routes if replies get slow.

@@ -14,25 +14,30 @@ export function CommandPalette() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
 
+  // Close resets the palette so it opens fresh next time
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+    setGroups([]);
+  }, []);
+
   // Global ⌘K / Ctrl+K shortcut
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        setQuery("");
+        setGroups([]);
         setOpen((o) => !o);
       }
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [close]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 30);
-    else {
-      setQuery("");
-      setGroups([]);
-    }
   }, [open]);
 
   const runSearch = useCallback((q: string) => {
@@ -45,7 +50,7 @@ export function CommandPalette() {
   }, []);
 
   function go(href: string) {
-    setOpen(false);
+    close();
     router.push(href);
   }
 
@@ -66,7 +71,7 @@ export function CommandPalette() {
       {open && (
         <div
           className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[2px] flex items-start justify-center pt-[12vh] px-4"
-          onClick={() => setOpen(false)}
+          onClick={close}
         >
           <div
             className="w-full max-w-[560px] bg-card border border-line rounded-2xl shadow-2xl overflow-hidden"

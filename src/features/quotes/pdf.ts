@@ -22,7 +22,6 @@ function money(n: number, currency: string): string {
 
 /** pdf-lib standard fonts use WinAnsi — replace anything outside it. */
 function safe(text: string): string {
-  // eslint-disable-next-line no-control-regex
   return text.replace(/[^\x00-\xFF€]/g, "?");
 }
 
