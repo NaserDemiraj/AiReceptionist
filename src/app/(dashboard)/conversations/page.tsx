@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { format } from "date-fns";
-import { Bot, MessageSquare, User } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import { Badge, EmptyState, cx } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { AgentComposer } from "@/features/conversations/components/agent-composer";
+import { EarlierMessages } from "@/features/conversations/components/earlier-messages";
+import { MessageBubble } from "@/features/conversations/components/message-bubble";
+import { MESSAGES_PAGE_SIZE } from "@/features/conversations/transcript";
 import { AutoRefresh } from "@/components/auto-refresh";
 import {
   CHANNEL_LABELS,
@@ -39,15 +42,31 @@ export default async function ConversationsPage({
   });
 
   const selectedId = params.c ?? conversations[0]?.id;
+  // Only the latest page of the transcript — history loads on demand
   const selected = selectedId
     ? await prisma.conversation.findFirst({
         where: { id: selectedId, organizationId: org.id },
         include: {
           customer: true,
-          messages: { orderBy: { createdAt: "asc" }, include: { agent: true } },
+          messages: {
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: MESSAGES_PAGE_SIZE + 1, // sentinel row → "load earlier" button
+            include: { agent: { select: { name: true } } },
+          },
         },
       })
     : null;
+  const hasEarlier = (selected?.messages.length ?? 0) > MESSAGES_PAGE_SIZE;
+  const transcript = (selected?.messages ?? [])
+    .slice(0, MESSAGES_PAGE_SIZE)
+    .reverse()
+    .map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      createdAt: m.createdAt,
+      agentName: m.agent?.name ?? null,
+    }));
 
   const filters = [
     { key: undefined, label: "All" },
@@ -156,48 +175,16 @@ export default async function ConversationsPage({
                 </Badge>
               </div>
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                {selected.messages.map((m) => {
-                  const isCustomer = m.role === "CUSTOMER";
-                  const isSystem = m.role === "SYSTEM";
-                  if (isSystem) {
-                    return (
-                      <div key={m.id} className="text-center">
-                        <span className="font-mono text-[10.5px] text-ink-soft bg-hover px-3 py-1 rounded-full">
-                          {m.content}
-                        </span>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div key={m.id} className={cx("flex gap-2.5", !isCustomer && "flex-row-reverse")}>
-                      <div
-                        className={cx(
-                          "w-7 h-7 rounded-full flex items-center justify-center shrink-0",
-                          isCustomer ? "bg-hover text-ink-mid" : "bg-accent-soft text-accent",
-                        )}
-                      >
-                        {isCustomer ? <User size={13} /> : <Bot size={13} />}
-                      </div>
-                      <div className={cx("max-w-[65%]", !isCustomer && "text-right")}>
-                        <div
-                          className={cx(
-                            "inline-block px-3.5 py-2.5 rounded-2xl text-[13.5px] leading-relaxed text-left",
-                            isCustomer
-                              ? "bg-card border border-line rounded-tl-sm"
-                              : "bg-accent text-white rounded-tr-sm",
-                          )}
-                        >
-                          {m.content}
-                        </div>
-                        <div className="text-[10.5px] text-ink-soft mt-1 px-1">
-                          {m.role === "AGENT" ? (m.agent?.name ?? "Agent") : m.role === "AI" ? "AI" : ""}
-                          {m.role !== "CUSTOMER" ? " · " : ""}
-                          {format(m.createdAt, "MMM d, HH:mm")}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {hasEarlier && transcript.length > 0 && (
+                  <EarlierMessages
+                    key={selected.id}
+                    conversationId={selected.id}
+                    oldestShownId={transcript[0].id}
+                  />
+                )}
+                {transcript.map((m) => (
+                  <MessageBubble key={m.id} message={m} />
+                ))}
               </div>
               <AgentComposer conversationId={selected.id} status={selected.status} />
             </>

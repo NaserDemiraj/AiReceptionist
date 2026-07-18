@@ -6,6 +6,7 @@ import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "@/lib/errors";
 import { deliverToChannel } from "@/lib/channels/deliver";
+import { MESSAGES_PAGE_SIZE, type TranscriptMessage } from "./transcript";
 
 async function ownedConversation(conversationId: string) {
   const { org, user } = await requireOrg();
@@ -48,6 +49,40 @@ export async function sendAgentReply(formData: FormData): Promise<void> {
   await deliverToChannel(conversation.id, text.trim());
 
   revalidatePath("/conversations");
+}
+
+/**
+ * Fetches the page of messages *before* the given cursor message — the
+ * transcript pane renders only the latest page and pulls history on demand.
+ */
+export async function loadEarlierMessages(
+  conversationId: string,
+  beforeMessageId: string,
+): Promise<{ messages: TranscriptMessage[]; hasMore: boolean }> {
+  const { conversation } = await ownedConversation(conversationId);
+
+  const rows = await prisma.message.findMany({
+    where: { conversationId: conversation.id },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    cursor: { id: beforeMessageId },
+    skip: 1,
+    take: MESSAGES_PAGE_SIZE + 1, // one extra to know if more remain
+    include: { agent: { select: { name: true } } },
+  });
+
+  const hasMore = rows.length > MESSAGES_PAGE_SIZE;
+  const page = rows.slice(0, MESSAGES_PAGE_SIZE);
+  return {
+    hasMore,
+    // Rows come newest-first; the transcript wants oldest-first
+    messages: page.reverse().map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      createdAt: m.createdAt,
+      agentName: m.agent?.name ?? null,
+    })),
+  };
 }
 
 export async function resolveConversation(formData: FormData): Promise<void> {
