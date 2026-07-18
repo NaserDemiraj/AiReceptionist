@@ -154,6 +154,74 @@ export async function assignConversation(formData: FormData): Promise<void> {
   revalidatePath("/conversations");
 }
 
+/**
+ * Bulk resolve / bulk assign from the list pane checkboxes.
+ * RBAC is enforced in the updateMany WHERE clause: agents can only touch
+ * unassigned conversations or their own, and can only assign to themselves.
+ */
+export async function bulkConversations(formData: FormData): Promise<void> {
+  const ids = formData
+    .getAll("ids")
+    .map(String)
+    .filter(Boolean)
+    .slice(0, 100);
+  if (ids.length === 0) return;
+
+  const action = z.enum(["resolve", "assign"]).parse(formData.get("bulkAction"));
+  const { org, user, role } = await requireOrg();
+
+  const visibility =
+    role === "AGENT" ? { OR: [{ assignedToId: null }, { assignedToId: user.id }] } : {};
+  const scope = { id: { in: ids }, organizationId: org.id, ...visibility };
+
+  if (action === "resolve") {
+    const result = await prisma.conversation.updateMany({
+      where: scope,
+      data: { status: "RESOLVED" as const, endedAt: new Date() },
+    });
+    if (result.count > 0) {
+      await prisma.auditLog.create({
+        data: {
+          organizationId: org.id,
+          userId: user.id,
+          action: "conversation.bulk_resolve",
+          entityType: "Conversation",
+          metadata: { count: result.count },
+        },
+      });
+    }
+  } else {
+    const memberId = String(formData.get("memberId") ?? "");
+    const targetId = memberId || null;
+    if (role === "AGENT" && targetId !== user.id) {
+      throw forbidden("Agents can only assign conversations to themselves");
+    }
+    if (targetId) {
+      const member = await prisma.membership.findFirst({
+        where: { organizationId: org.id, userId: targetId },
+        select: { userId: true },
+      });
+      if (!member) throw notFound("That person isn't a member of this workspace");
+    }
+    const result = await prisma.conversation.updateMany({
+      where: scope,
+      data: { assignedToId: targetId },
+    });
+    if (result.count > 0) {
+      await prisma.auditLog.create({
+        data: {
+          organizationId: org.id,
+          userId: user.id,
+          action: targetId ? "conversation.bulk_assign" : "conversation.bulk_unassign",
+          entityType: "Conversation",
+          metadata: { count: result.count, ...(targetId ? { assignedToId: targetId } : {}) },
+        },
+      });
+    }
+  }
+  revalidatePath("/conversations");
+}
+
 export async function returnToAi(formData: FormData): Promise<void> {
   const conversationId = z.string().min(1).parse(formData.get("conversationId"));
   const { conversation } = await ownedConversation(conversationId);

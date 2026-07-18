@@ -6,7 +6,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { AgentComposer } from "@/features/conversations/components/agent-composer";
-import { assignConversation } from "@/features/conversations/actions";
+import { assignConversation, bulkConversations } from "@/features/conversations/actions";
 import { EarlierMessages } from "@/features/conversations/components/earlier-messages";
 import { MessageBubble } from "@/features/conversations/components/message-bubble";
 import { MESSAGES_PAGE_SIZE } from "@/features/conversations/transcript";
@@ -125,58 +125,120 @@ export default async function ConversationsPage({
               </Link>
             ))}
           </div>
-          <div className="flex-1 overflow-y-auto">
-            {conversations.length === 0 ? (
-              <EmptyState
-                title="No conversations"
-                hint="Once your AI receptionist starts talking to customers, they show up here."
-                icon={<MessageSquare size={28} />}
-              />
-            ) : (
-              conversations.map((c) => {
-                const meta = CONVERSATION_STATUS_META[c.status];
-                const active = c.id === selected?.id;
-                return (
-                  <Link
-                    key={c.id}
-                    href={`/conversations?c=${c.id}${listQuery}`}
-                    className={cx(
-                      "flex gap-3 px-4 py-3 border-b border-line",
-                      active ? "bg-accent-soft/50" : "hover:bg-row-hover",
-                    )}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-accent-soft text-accent flex items-center justify-center text-[12px] font-semibold shrink-0">
-                      {(c.customer.name ?? "V")[0].toUpperCase()}
+          <form action={bulkConversations} className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 overflow-y-auto">
+              {conversations.length === 0 ? (
+                <EmptyState
+                  title="No conversations"
+                  hint="Once your AI receptionist starts talking to customers, they show up here."
+                  icon={<MessageSquare size={28} />}
+                />
+              ) : (
+                conversations.map((c) => {
+                  const meta = CONVERSATION_STATUS_META[c.status];
+                  const active = c.id === selected?.id;
+                  return (
+                    <div
+                      key={c.id}
+                      className={cx(
+                        "flex items-start gap-2 pl-3 border-b border-line",
+                        active ? "bg-accent-soft/50" : "hover:bg-row-hover",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        name="ids"
+                        value={c.id}
+                        aria-label="Select conversation"
+                        className="mt-4 accent-[var(--color-accent,#5B57D4)] cursor-pointer"
+                      />
+                      <Link
+                        href={`/conversations?c=${c.id}${listQuery}`}
+                        className="flex-1 min-w-0 flex gap-3 py-3 pr-4"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-accent-soft text-accent flex items-center justify-center text-[12px] font-semibold shrink-0">
+                          {(c.customer.name ?? "V")[0].toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-semibold truncate">
+                              {c.customer.name ?? "Web visitor"}
+                            </span>
+                            <span className="ml-auto text-[10.5px] text-ink-soft shrink-0">
+                              {format(c.updatedAt, "HH:mm")}
+                            </span>
+                          </div>
+                          <div className="text-[12px] text-ink-mid truncate mt-0.5">
+                            {c.messages[0]?.content ?? c.subject ?? "…"}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1.5">
+                            <Badge tone={meta.tone}>{meta.label}</Badge>
+                            <span className="font-mono text-[10px] text-ink-soft">
+                              {CHANNEL_LABELS[c.channel]}
+                            </span>
+                            {c.assignedTo && (
+                              <span className="ml-auto text-[10px] text-ink-soft truncate max-w-[80px]">
+                                {c.assignedTo.id === user.id ? "You" : c.assignedTo.name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-semibold truncate">
-                          {c.customer.name ?? "Web visitor"}
-                        </span>
-                        <span className="ml-auto text-[10.5px] text-ink-soft shrink-0">
-                          {format(c.updatedAt, "HH:mm")}
-                        </span>
-                      </div>
-                      <div className="text-[12px] text-ink-mid truncate mt-0.5">
-                        {c.messages[0]?.content ?? c.subject ?? "…"}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Badge tone={meta.tone}>{meta.label}</Badge>
-                        <span className="font-mono text-[10px] text-ink-soft">
-                          {CHANNEL_LABELS[c.channel]}
-                        </span>
-                        {c.assignedTo && (
-                          <span className="ml-auto text-[10px] text-ink-soft truncate max-w-[80px]">
-                            {c.assignedTo.id === user.id ? "You" : c.assignedTo.name}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })
+                  );
+                })
+              )}
+            </div>
+            {conversations.length > 0 && (
+              <div className="shrink-0 border-t border-line bg-card px-3 py-2 flex items-center gap-1.5">
+                <span className="text-[10.5px] text-ink-soft mr-auto">With selected:</span>
+                <button
+                  type="submit"
+                  name="bulkAction"
+                  value="resolve"
+                  className="text-[11.5px] font-medium text-ink-mid hover:text-ink bg-hover rounded-lg px-2.5 py-1 cursor-pointer"
+                >
+                  Resolve
+                </button>
+                {role === "AGENT" ? (
+                  <>
+                    <input type="hidden" name="memberId" value={user.id} />
+                    <button
+                      type="submit"
+                      name="bulkAction"
+                      value="assign"
+                      className="text-[11.5px] font-medium text-accent bg-accent-soft hover:bg-accent-soft/70 rounded-lg px-2.5 py-1 cursor-pointer"
+                    >
+                      Assign to me
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <select
+                      name="memberId"
+                      defaultValue={user.id}
+                      className="h-6.5 text-[11px] bg-hover border border-line rounded-lg px-1"
+                    >
+                      <option value="">Unassigned</option>
+                      {members.map((m) => (
+                        <option key={m.user.id} value={m.user.id}>
+                          {m.user.id === user.id ? `${m.user.name} (you)` : m.user.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="submit"
+                      name="bulkAction"
+                      value="assign"
+                      className="text-[11.5px] font-medium text-accent bg-accent-soft hover:bg-accent-soft/70 rounded-lg px-2.5 py-1 cursor-pointer"
+                    >
+                      Assign
+                    </button>
+                  </>
+                )}
+              </div>
             )}
-          </div>
+          </form>
         </div>
 
         {/* Transcript pane */}
