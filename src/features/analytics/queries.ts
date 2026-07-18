@@ -19,6 +19,104 @@ export interface DayPoint {
   value: number;
 }
 
+export interface MemberPerformance {
+  userId: string;
+  name: string;
+  role: string;
+  repliesSent: number;
+  conversationsHandled: number;
+  resolved: number;
+  csat: number | null; // % thumbs-up on their conversations
+  csatResponses: number;
+  appointments: number;
+}
+
+/** Per-team-member activity for the analytics "Team performance" table. */
+export async function getTeamPerformance(
+  orgId: string,
+  days: number,
+): Promise<MemberPerformance[]> {
+  const since = startOfDay(subDays(new Date(), days - 1));
+
+  const [members, replyGroups, handledGroups, resolvedGroups, csatUpGroups, csatDownGroups, apptGroups] =
+    await Promise.all([
+      prisma.membership.findMany({
+        where: { organizationId: orgId },
+        select: { role: true, user: { select: { id: true, name: true } } },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.message.groupBy({
+        by: ["agentId"],
+        where: {
+          role: "AGENT",
+          agentId: { not: null },
+          createdAt: { gte: since },
+          conversation: { is: { organizationId: orgId } },
+        },
+        _count: true,
+      }),
+      prisma.conversation.groupBy({
+        by: ["assignedToId"],
+        where: { organizationId: orgId, assignedToId: { not: null }, updatedAt: { gte: since } },
+        _count: true,
+      }),
+      prisma.conversation.groupBy({
+        by: ["assignedToId"],
+        where: {
+          organizationId: orgId,
+          assignedToId: { not: null },
+          updatedAt: { gte: since },
+          status: "RESOLVED",
+        },
+        _count: true,
+      }),
+      prisma.conversation.groupBy({
+        by: ["assignedToId"],
+        where: {
+          organizationId: orgId,
+          assignedToId: { not: null },
+          updatedAt: { gte: since },
+          csatRating: 1,
+        },
+        _count: true,
+      }),
+      prisma.conversation.groupBy({
+        by: ["assignedToId"],
+        where: {
+          organizationId: orgId,
+          assignedToId: { not: null },
+          updatedAt: { gte: since },
+          csatRating: -1,
+        },
+        _count: true,
+      }),
+      prisma.appointment.groupBy({
+        by: ["staffId"],
+        where: { organizationId: orgId, staffId: { not: null }, createdAt: { gte: since } },
+        _count: true,
+      }),
+    ]);
+
+  const count = (groups: Array<{ _count: number } & Record<string, unknown>>, key: string, id: string) =>
+    groups.find((g) => g[key] === id)?._count ?? 0;
+
+  return members.map(({ role, user }) => {
+    const up = count(csatUpGroups, "assignedToId", user.id);
+    const down = count(csatDownGroups, "assignedToId", user.id);
+    return {
+      userId: user.id,
+      name: user.name,
+      role,
+      repliesSent: count(replyGroups, "agentId", user.id),
+      conversationsHandled: count(handledGroups, "assignedToId", user.id),
+      resolved: count(resolvedGroups, "assignedToId", user.id),
+      csat: up + down > 0 ? Math.round((up / (up + down)) * 100) : null,
+      csatResponses: up + down,
+      appointments: count(apptGroups, "staffId", user.id),
+    };
+  });
+}
+
 export async function getAnalytics(orgId: string, days: number) {
   const since = startOfDay(subDays(new Date(), days - 1));
 

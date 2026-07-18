@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, cx } from "@/components/ui";
 import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
-import { getAnalytics } from "@/features/analytics/queries";
+import { getAnalytics, getTeamPerformance } from "@/features/analytics/queries";
 import { ColumnChart, BarList } from "@/features/analytics/components/charts";
 import { CHANNEL_LABELS, LEAD_STATUS_META, formatMoney } from "@/features/shared/labels";
 
@@ -43,7 +43,10 @@ export default async function AnalyticsPage({
   const params = await searchParams;
   const range = RANGES.find((r) => r.key === params.range) ?? RANGES[1];
 
-  const data = await getAnalytics(org.id, range.days);
+  const [data, team] = await Promise.all([
+    getAnalytics(org.id, range.days),
+    getTeamPerformance(org.id, range.days),
+  ]);
   const funnelLabels = Object.fromEntries(
     Object.entries(LEAD_STATUS_META).map(([k, v]) => [k, v.label]),
   );
@@ -155,6 +158,53 @@ export default async function AnalyticsPage({
             />
           </Card>
         </div>
+
+        {/* Team performance */}
+        <Card className="p-5 mt-4">
+          <div className="flex items-baseline justify-between mb-4">
+            <h2 className="text-[14px] font-semibold">Team performance</h2>
+            <span className="text-[11.5px] text-ink-soft">last {range.label}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-ink-soft border-b border-line">
+                  <th className="py-2 pr-4 font-medium">Member</th>
+                  <th className="py-2 pr-4 font-medium text-right">Replies sent</th>
+                  <th className="py-2 pr-4 font-medium text-right">Conversations</th>
+                  <th className="py-2 pr-4 font-medium text-right">Resolved</th>
+                  <th className="py-2 pr-4 font-medium text-right">CSAT</th>
+                  <th className="py-2 font-medium text-right">Appointments</th>
+                </tr>
+              </thead>
+              <tbody>
+                {team.map((m) => (
+                  <tr key={m.userId} className="border-b border-line last:border-0">
+                    <td className="py-2.5 pr-4">
+                      <span className="font-medium text-ink">{m.name}</span>
+                      <span className="ml-2 text-[11px] text-ink-soft">
+                        {m.role === "OWNER" ? "Owner" : m.role === "ADMIN" ? "Admin" : "Agent"}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{m.repliesSent}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{m.conversationsHandled}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{m.resolved}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">
+                      {m.csat !== null ? `${m.csat}%` : "—"}
+                      {m.csatResponses > 0 && (
+                        <span className="text-[10.5px] text-ink-soft"> ({m.csatResponses})</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 text-right tabular-nums">{m.appointments}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {team.length === 0 && (
+              <p className="text-[12.5px] text-ink-soft py-4 text-center">No team members yet.</p>
+            )}
+          </div>
+        </Card>
       </div>
     </>
   );
