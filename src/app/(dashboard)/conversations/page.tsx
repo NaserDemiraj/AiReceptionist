@@ -115,6 +115,7 @@ export default async function ConversationsPage({
       WHERE "organizationId" = ${org.id} ORDER BY tag LIMIT 20`
   ).map((r) => r.tag);
   const hasEarlier = (selected?.messages.length ?? 0) > MESSAGES_PAGE_SIZE;
+  const showTrace = role !== "AGENT"; // owners/admins can inspect AI tool calls
   const transcript = (selected?.messages ?? [])
     .slice(0, MESSAGES_PAGE_SIZE)
     .reverse()
@@ -124,6 +125,7 @@ export default async function ConversationsPage({
       content: m.content,
       createdAt: m.createdAt,
       agentName: m.agent?.name ?? null,
+      metadata: m.metadata,
     }));
 
   const qParam = searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : "";
@@ -418,10 +420,11 @@ export default async function ConversationsPage({
                     key={selected.id}
                     conversationId={selected.id}
                     oldestShownId={transcript[0].id}
+                    showTrace={showTrace}
                   />
                 )}
                 {transcript.map((m) => (
-                  <MessageBubble key={m.id} message={m} />
+                  <MessageBubble key={m.id} message={m} showTrace={showTrace} />
                 ))}
               </div>
               <AgentComposer conversationId={selected.id} status={selected.status} />

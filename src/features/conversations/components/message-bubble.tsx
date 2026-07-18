@@ -1,12 +1,20 @@
 import { format } from "date-fns";
-import { Bot, User } from "lucide-react";
+import { Bot, User, Wrench } from "lucide-react";
 import { cx } from "@/components/ui";
-import type { TranscriptMessage } from "../transcript";
+import { extractAiTrace, type TranscriptMessage } from "../transcript";
 
 /** One transcript entry — used by the server-rendered page and the
- *  client-side "load earlier" pane, so both render identically. */
-export function MessageBubble({ message: m }: { message: TranscriptMessage }) {
+ *  client-side "load earlier" pane, so both render identically.
+ *  `showTrace` (owners/admins) reveals which tools the AI called. */
+export function MessageBubble({
+  message: m,
+  showTrace = false,
+}: {
+  message: TranscriptMessage;
+  showTrace?: boolean;
+}) {
   const isCustomer = m.role === "CUSTOMER";
+  const trace = showTrace && m.role === "AI" ? extractAiTrace(m.metadata) : null;
   if (m.role === "SYSTEM") {
     return (
       <div className="text-center">
@@ -42,6 +50,29 @@ export function MessageBubble({ message: m }: { message: TranscriptMessage }) {
           {m.role !== "CUSTOMER" ? " · " : ""}
           {format(m.createdAt, "MMM d, HH:mm")}
         </div>
+        {trace && (
+          <details className="mt-1 px-1 text-left">
+            <summary className="inline-flex items-center gap-1 font-mono text-[10px] text-ink-soft cursor-pointer select-none hover:text-ink-mid">
+              <Wrench size={10} />
+              {trace.tools.length > 0
+                ? trace.tools.map((t) => t.name).join(", ")
+                : "no tools"}
+              {trace.latencyMs !== null ? ` · ${(trace.latencyMs / 1000).toFixed(1)}s` : ""}
+            </summary>
+            {trace.tools.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {trace.tools.map((t, i) => (
+                  <div
+                    key={i}
+                    className="font-mono text-[10px] text-ink-mid bg-hover rounded px-1.5 py-1 break-all"
+                  >
+                    {t.name}({t.args ?? ""})
+                  </div>
+                ))}
+              </div>
+            )}
+          </details>
+        )}
       </div>
     </div>
   );

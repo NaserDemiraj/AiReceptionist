@@ -13,9 +13,11 @@ import { MessageBubble } from "./message-bubble";
 export function EarlierMessages({
   conversationId,
   oldestShownId,
+  showTrace = false,
 }: {
   conversationId: string;
   oldestShownId: string;
+  showTrace?: boolean;
 }) {
   const [older, setOlder] = useState<TranscriptMessage[]>([]);
   const [hasMore, setHasMore] = useState(true);
@@ -44,7 +46,7 @@ export function EarlierMessages({
         </div>
       )}
       {older.map((m) => (
-        <MessageBubble key={m.id} message={m} />
+        <MessageBubble key={m.id} message={m} showTrace={showTrace} />
       ))}
     </>
   );

@@ -192,7 +192,8 @@ export async function processCustomerMessage(
   const provider = getProvider(config.provider as "GROQ" | "OPENAI");
   const started = Date.now();
   let reply: string | null = null;
-  const toolsUsed: string[] = [];
+  // Debug trace: which tools ran with which arguments (rendered to admins)
+  const toolsUsed: Array<{ name: string; args?: string }> = [];
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     try {
@@ -209,7 +210,7 @@ export async function processCustomerMessage(
           toolCalls: result.toolCalls,
         });
         for (const call of result.toolCalls) {
-          toolsUsed.push(call.name);
+          toolsUsed.push({ name: call.name, args: call.arguments?.slice(0, 300) });
           const output = await executeTool(ctx, call.name, call.arguments);
           messages.push({ role: "tool", content: output, toolCallId: call.id });
         }

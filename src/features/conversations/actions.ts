@@ -93,6 +93,7 @@ export async function loadEarlierMessages(
       content: m.content,
       createdAt: m.createdAt,
       agentName: m.agent?.name ?? null,
+      metadata: m.metadata,
     })),
   };
 }
