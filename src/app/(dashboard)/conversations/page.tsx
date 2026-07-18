@@ -22,7 +22,7 @@ export const metadata = { title: "Conversations" };
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; status?: string; mine?: string }>;
+  searchParams: Promise<{ c?: string; status?: string; mine?: string; q?: string }>;
 }) {
   const { org, user, role } = await requireOrg();
   const params = await searchParams;
@@ -32,6 +32,7 @@ export default async function ConversationsPage({
       ? (params.status as keyof typeof CONVERSATION_STATUS_META)
       : undefined;
   const mineOnly = params.mine === "1";
+  const searchQuery = params.q?.trim().slice(0, 100) || undefined;
 
   // Agents only see unassigned conversations plus their own
   const visibility =
@@ -39,10 +40,28 @@ export default async function ConversationsPage({
       ? { OR: [{ assignedToId: null }, { assignedToId: user.id }] }
       : {};
 
+  const contains = searchQuery
+    ? { contains: searchQuery, mode: "insensitive" as const }
+    : undefined;
+
   const conversations = await prisma.conversation.findMany({
     where: {
       organizationId: org.id,
-      ...visibility,
+      AND: [
+        visibility,
+        // Free-text: customer, subject, or anywhere in the transcript
+        ...(contains
+          ? [
+              {
+                OR: [
+                  { subject: contains },
+                  { customer: { is: { name: contains } } },
+                  { messages: { some: { content: contains } } },
+                ],
+              },
+            ]
+          : []),
+      ],
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(mineOnly ? { assignedToId: user.id } : {}),
     },
@@ -93,14 +112,15 @@ export default async function ConversationsPage({
       agentName: m.agent?.name ?? null,
     }));
 
+  const qParam = searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : "";
   const filters = [
-    { href: "/conversations", label: "All", active: !statusFilter && !mineOnly },
-    { href: "/conversations?mine=1", label: "Mine", active: mineOnly },
-    { href: "/conversations?status=AI_ACTIVE", label: "AI handling", active: statusFilter === "AI_ACTIVE" },
-    { href: "/conversations?status=NEEDS_HUMAN", label: "Needs human", active: statusFilter === "NEEDS_HUMAN" },
-    { href: "/conversations?status=RESOLVED", label: "Resolved", active: statusFilter === "RESOLVED" },
+    { href: `/conversations?_=1${qParam}`, label: "All", active: !statusFilter && !mineOnly },
+    { href: `/conversations?mine=1${qParam}`, label: "Mine", active: mineOnly },
+    { href: `/conversations?status=AI_ACTIVE${qParam}`, label: "AI handling", active: statusFilter === "AI_ACTIVE" },
+    { href: `/conversations?status=NEEDS_HUMAN${qParam}`, label: "Needs human", active: statusFilter === "NEEDS_HUMAN" },
+    { href: `/conversations?status=RESOLVED${qParam}`, label: "Resolved", active: statusFilter === "RESOLVED" },
   ];
-  const listQuery = `${statusFilter ? `&status=${statusFilter}` : ""}${mineOnly ? "&mine=1" : ""}`;
+  const listQuery = `${statusFilter ? `&status=${statusFilter}` : ""}${mineOnly ? "&mine=1" : ""}${qParam}`;
 
   return (
     <>
@@ -109,6 +129,17 @@ export default async function ConversationsPage({
       <div className="flex-1 flex min-h-0">
         {/* List pane */}
         <div className="w-[340px] shrink-0 border-r border-line bg-card flex flex-col min-h-0">
+          <form action="/conversations" className="px-3 pt-3">
+            {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
+            {mineOnly && <input type="hidden" name="mine" value="1" />}
+            <input
+              type="search"
+              name="q"
+              defaultValue={searchQuery ?? ""}
+              placeholder="Search conversations & messages…"
+              className="w-full h-8 text-[12.5px] bg-hover border border-line rounded-[9px] px-3 placeholder:text-ink-soft outline-none focus:border-line-strong"
+            />
+          </form>
           <div className="flex gap-1.5 p-3 border-b border-line">
             {filters.map((f) => (
               <Link

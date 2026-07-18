@@ -16,11 +16,15 @@ export interface SearchGroup {
 }
 
 export async function globalSearch(query: string): Promise<SearchGroup[]> {
-  const { org } = await requireOrg();
+  const { org, user, role } = await requireOrg();
   const q = query.trim();
   if (q.length < 2) return [];
 
   const contains = { contains: q, mode: "insensitive" as const };
+  // Same visibility rule as the conversations page: agents only see
+  // unassigned conversations and their own
+  const conversationVisibility =
+    role === "AGENT" ? { OR: [{ assignedToId: null }, { assignedToId: user.id }] } : {};
 
   const [customers, leads, products, conversations, quotes] = await Promise.all([
     prisma.customer.findMany({
@@ -48,11 +52,25 @@ export async function globalSearch(query: string): Promise<SearchGroup[]> {
     prisma.conversation.findMany({
       where: {
         organizationId: org.id,
-        OR: [{ subject: contains }, { customer: { is: { name: contains } } }],
+        AND: [
+          conversationVisibility,
+          {
+            OR: [
+              { subject: contains },
+              { customer: { is: { name: contains } } },
+              // Full-text over the transcript (GIN trigram index on content)
+              { messages: { some: { content: contains } } },
+            ],
+          },
+        ],
       },
       take: 5,
       orderBy: { updatedAt: "desc" },
-      include: { customer: true },
+      include: {
+        customer: true,
+        // The matching line, as the result's snippet
+        messages: { where: { content: contains }, take: 1, orderBy: { createdAt: "desc" } },
+      },
     }),
     prisma.quote.findMany({
       where: {
@@ -80,7 +98,7 @@ export async function globalSearch(query: string): Promise<SearchGroup[]> {
       items: conversations.map((c) => ({
         id: c.id,
         title: c.customer.name ?? "Web visitor",
-        subtitle: c.subject ?? "",
+        subtitle: c.messages[0]?.content.slice(0, 80) ?? c.subject ?? "",
         href: `/conversations?c=${c.id}`,
       })),
     },
