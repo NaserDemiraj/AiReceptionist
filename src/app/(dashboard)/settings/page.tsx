@@ -8,11 +8,12 @@ import { WidgetSettingsForm } from "@/features/settings/components/widget-settin
 import { RotateKeyButton } from "@/features/settings/components/rotate-key-button";
 import { ChangePasswordForm } from "@/features/settings/components/change-password-form";
 import { TwoFactorCard } from "@/features/settings/components/two-factor-card";
+import { DangerZoneCard } from "@/features/settings/components/danger-zone-card";
 
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
-  const { org, user } = await requireOrg();
+  const { org, user, role } = await requireOrg();
   const baseUrl = await getBaseUrl();
   const config =
     (await prisma.aiConfig.findUnique({ where: { organizationId: org.id } })) ??
@@ -79,6 +80,16 @@ export default async function SettingsPage() {
             </p>
             <TwoFactorCard enabled={Boolean(user.totpEnabledAt)} />
           </Card>
+
+          {role === "OWNER" && (
+            <Card className="p-6 border-danger/20">
+              <h2 className="text-[15px] font-semibold mb-1">Data & danger zone</h2>
+              <p className="text-[12.5px] text-ink-mid mb-5">
+                Export everything your workspace holds, or delete it permanently.
+              </p>
+              <DangerZoneCard orgName={org.name} />
+            </Card>
+          )}
         </div>
       </div>
     </>

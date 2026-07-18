@@ -114,3 +114,36 @@ export async function updateWidgetSettings(
   revalidatePath("/settings");
   return { success: true };
 }
+
+/* ---------- Danger zone: delete the organization ---------- */
+
+export async function deleteOrganization(
+  _prev: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  const { org, user, role } = await requireOrg();
+  if (role !== "OWNER") throw forbidden("Only the owner can delete the organization");
+
+  const confirmName = String(formData.get("confirmName") ?? "").trim();
+  if (confirmName !== org.name) {
+    return { error: `Type the business name exactly ("${org.name}") to confirm.` };
+  }
+
+  const { compare } = await import("bcryptjs");
+  const password = String(formData.get("password") ?? "");
+  if (!(await compare(password, user.passwordHash))) {
+    return { error: "Wrong password." };
+  }
+
+  const { logger } = await import("@/lib/logger");
+  logger.warn({ orgId: org.id, slug: org.slug, by: user.email }, "organization deleted by owner");
+
+  // Cascades: memberships, customers, conversations, messages, leads,
+  // products, appointments, quotes, knowledge, integrations, webhooks, …
+  await prisma.organization.delete({ where: { id: org.id } });
+
+  const { signOut } = await import("@/lib/auth");
+  const { redirect } = await import("next/navigation");
+  await signOut({ redirect: false });
+  redirect("/login");
+}
