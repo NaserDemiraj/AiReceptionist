@@ -222,6 +222,54 @@ export async function bulkConversations(formData: FormData): Promise<void> {
   revalidatePath("/conversations");
 }
 
+const tagSchema = z.object({
+  conversationId: z.string().min(1),
+  tag: z
+    .string()
+    .trim()
+    .min(1, "Tag can't be empty")
+    .max(30, "Keep tags under 30 characters")
+    .transform((t) => t.toLowerCase()),
+});
+
+export async function addConversationTag(formData: FormData): Promise<void> {
+  const { conversationId, tag } = tagSchema.parse({
+    conversationId: formData.get("conversationId"),
+    tag: formData.get("tag"),
+  });
+  const { conversation } = await ownedConversation(conversationId);
+
+  const current = await prisma.conversation.findUniqueOrThrow({
+    where: { id: conversation.id },
+    select: { tags: true },
+  });
+  if (!current.tags.includes(tag) && current.tags.length < 10) {
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { tags: [...current.tags, tag] },
+    });
+  }
+  revalidatePath("/conversations");
+}
+
+export async function removeConversationTag(formData: FormData): Promise<void> {
+  const { conversationId, tag } = tagSchema.parse({
+    conversationId: formData.get("conversationId"),
+    tag: formData.get("tag"),
+  });
+  const { conversation } = await ownedConversation(conversationId);
+
+  const current = await prisma.conversation.findUniqueOrThrow({
+    where: { id: conversation.id },
+    select: { tags: true },
+  });
+  await prisma.conversation.update({
+    where: { id: conversation.id },
+    data: { tags: current.tags.filter((t) => t !== tag) },
+  });
+  revalidatePath("/conversations");
+}
+
 export async function returnToAi(formData: FormData): Promise<void> {
   const conversationId = z.string().min(1).parse(formData.get("conversationId"));
   const { conversation } = await ownedConversation(conversationId);

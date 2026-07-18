@@ -6,7 +6,12 @@ import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { AgentComposer } from "@/features/conversations/components/agent-composer";
-import { assignConversation, bulkConversations } from "@/features/conversations/actions";
+import {
+  addConversationTag,
+  assignConversation,
+  bulkConversations,
+  removeConversationTag,
+} from "@/features/conversations/actions";
 import { EarlierMessages } from "@/features/conversations/components/earlier-messages";
 import { MessageBubble } from "@/features/conversations/components/message-bubble";
 import { MESSAGES_PAGE_SIZE } from "@/features/conversations/transcript";
@@ -22,7 +27,7 @@ export const metadata = { title: "Conversations" };
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; status?: string; mine?: string; q?: string }>;
+  searchParams: Promise<{ c?: string; status?: string; mine?: string; q?: string; tag?: string }>;
 }) {
   const { org, user, role } = await requireOrg();
   const params = await searchParams;
@@ -33,6 +38,7 @@ export default async function ConversationsPage({
       : undefined;
   const mineOnly = params.mine === "1";
   const searchQuery = params.q?.trim().slice(0, 100) || undefined;
+  const tagFilter = params.tag?.trim().toLowerCase().slice(0, 30) || undefined;
 
   // Agents only see unassigned conversations plus their own
   const visibility =
@@ -64,6 +70,7 @@ export default async function ConversationsPage({
       ],
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(mineOnly ? { assignedToId: user.id } : {}),
+      ...(tagFilter ? { tags: { has: tagFilter } } : {}),
     },
     orderBy: { updatedAt: "desc" },
     take: 50,
@@ -100,6 +107,13 @@ export default async function ConversationsPage({
           select: { user: { select: { id: true, name: true } } },
           orderBy: { createdAt: "asc" },
         });
+
+  // Every tag in use across the org — the filter chip row
+  const orgTags = (
+    await prisma.$queryRaw<Array<{ tag: string }>>`
+      SELECT DISTINCT unnest(tags) AS tag FROM "Conversation"
+      WHERE "organizationId" = ${org.id} ORDER BY tag LIMIT 20`
+  ).map((r) => r.tag);
   const hasEarlier = (selected?.messages.length ?? 0) > MESSAGES_PAGE_SIZE;
   const transcript = (selected?.messages ?? [])
     .slice(0, MESSAGES_PAGE_SIZE)
@@ -113,14 +127,16 @@ export default async function ConversationsPage({
     }));
 
   const qParam = searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : "";
+  const tagParam = tagFilter ? `&tag=${encodeURIComponent(tagFilter)}` : "";
   const filters = [
-    { href: `/conversations?_=1${qParam}`, label: "All", active: !statusFilter && !mineOnly },
-    { href: `/conversations?mine=1${qParam}`, label: "Mine", active: mineOnly },
-    { href: `/conversations?status=AI_ACTIVE${qParam}`, label: "AI handling", active: statusFilter === "AI_ACTIVE" },
-    { href: `/conversations?status=NEEDS_HUMAN${qParam}`, label: "Needs human", active: statusFilter === "NEEDS_HUMAN" },
-    { href: `/conversations?status=RESOLVED${qParam}`, label: "Resolved", active: statusFilter === "RESOLVED" },
+    { href: `/conversations?_=1${qParam}${tagParam}`, label: "All", active: !statusFilter && !mineOnly },
+    { href: `/conversations?mine=1${qParam}${tagParam}`, label: "Mine", active: mineOnly },
+    { href: `/conversations?status=AI_ACTIVE${qParam}${tagParam}`, label: "AI handling", active: statusFilter === "AI_ACTIVE" },
+    { href: `/conversations?status=NEEDS_HUMAN${qParam}${tagParam}`, label: "Needs human", active: statusFilter === "NEEDS_HUMAN" },
+    { href: `/conversations?status=RESOLVED${qParam}${tagParam}`, label: "Resolved", active: statusFilter === "RESOLVED" },
   ];
-  const listQuery = `${statusFilter ? `&status=${statusFilter}` : ""}${mineOnly ? "&mine=1" : ""}${qParam}`;
+  const listQuery = `${statusFilter ? `&status=${statusFilter}` : ""}${mineOnly ? "&mine=1" : ""}${qParam}${tagParam}`;
+  const statusMineQuery = `${statusFilter ? `&status=${statusFilter}` : ""}${mineOnly ? "&mine=1" : ""}${qParam}`;
 
   return (
     <>
@@ -156,6 +172,28 @@ export default async function ConversationsPage({
               </Link>
             ))}
           </div>
+          {orgTags.length > 0 && (
+            <div className="flex flex-wrap gap-1 px-3 py-2 border-b border-line">
+              {orgTags.map((t) => (
+                <Link
+                  key={t}
+                  href={
+                    tagFilter === t
+                      ? `/conversations?_=1${statusMineQuery}`
+                      : `/conversations?tag=${encodeURIComponent(t)}${statusMineQuery}`
+                  }
+                  className={cx(
+                    "font-mono text-[10.5px] rounded-full px-2 py-0.5",
+                    tagFilter === t
+                      ? "bg-accent text-white"
+                      : "bg-hover text-ink-mid hover:text-ink",
+                  )}
+                >
+                  #{t}
+                </Link>
+              ))}
+            </div>
+          )}
           <form action={bulkConversations} className="flex-1 flex flex-col min-h-0">
             <div className="flex-1 overflow-y-auto">
               {conversations.length === 0 ? (
@@ -347,6 +385,32 @@ export default async function ConversationsPage({
                 <Badge tone={CONVERSATION_STATUS_META[selected.status].tone}>
                   {CONVERSATION_STATUS_META[selected.status].label}
                 </Badge>
+              </div>
+              {/* Tags */}
+              <div className="shrink-0 border-b border-line bg-card flex flex-wrap items-center gap-1.5 px-5 py-2">
+                {selected.tags.map((t) => (
+                  <form key={t} action={removeConversationTag} className="inline-flex">
+                    <input type="hidden" name="conversationId" value={selected.id} />
+                    <input type="hidden" name="tag" value={t} />
+                    <button
+                      type="submit"
+                      title="Remove tag"
+                      className="group font-mono text-[10.5px] bg-accent-soft text-accent rounded-full px-2 py-0.5 cursor-pointer hover:bg-danger-soft hover:text-danger"
+                    >
+                      #{t}
+                      <span className="ml-1 opacity-50 group-hover:opacity-100">×</span>
+                    </button>
+                  </form>
+                ))}
+                <form action={addConversationTag} className="inline-flex">
+                  <input type="hidden" name="conversationId" value={selected.id} />
+                  <input
+                    name="tag"
+                    placeholder="+ tag"
+                    maxLength={30}
+                    className="w-[80px] font-mono text-[10.5px] bg-transparent text-ink-mid placeholder:text-ink-soft outline-none border border-transparent focus:border-line rounded-full px-2 py-0.5"
+                  />
+                </form>
               </div>
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
                 {hasEarlier && transcript.length > 0 && (

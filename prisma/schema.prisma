@@ -183,6 +183,8 @@ model Conversation {
   // Team member handling this conversation. Agents only see their own +
   // unassigned conversations; owners/admins see everything.
   assignedToId String?
+  // Free-form labels ("complaint", "pre-sales", "follow up monday", …)
+  tags String[] @default([])
   // Analytics
   firstResponseMs Int?
   endedAt         DateTime?
