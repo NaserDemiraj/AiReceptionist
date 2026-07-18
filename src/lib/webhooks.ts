@@ -62,6 +62,23 @@ export async function dispatchWebhooks(
           data: { lastStatus: status, lastFiredAt: new Date() },
         })
         .catch(() => {});
+
+      // Alert once per outage: previous delivery was fine, this one wasn't
+      const failedNow = status === null || status >= 400;
+      const wasHealthy = endpoint.lastStatus !== null && endpoint.lastStatus < 400;
+      if (failedNow && wasHealthy) {
+        await prisma.notification
+          .create({
+            data: {
+              organizationId,
+              type: "SYSTEM",
+              title: "A webhook endpoint stopped responding",
+              body: `${endpoint.url} returned ${status ?? "no response"} for ${event}. Check Integrations → Webhooks.`,
+              payload: { endpointId: endpoint.id, event, status },
+            },
+          })
+          .catch(() => {});
+      }
     }),
   );
 }

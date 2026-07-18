@@ -8,6 +8,13 @@ import { parseMessengerCredentials, sendMessengerText } from "./messenger";
 /** Channels that deliver through a ChannelIntegration row. */
 const EXTERNAL_CHANNELS: Channel[] = ["WHATSAPP", "SMS", "FACEBOOK", "INSTAGRAM"];
 
+const CHANNEL_NAMES: Partial<Record<Channel, string>> = {
+  WHATSAPP: "WhatsApp",
+  SMS: "SMS",
+  FACEBOOK: "Facebook Messenger",
+  INSTAGRAM: "Instagram DM",
+};
+
 /**
  * Delivers an outbound message (AI reply, agent reply, automation) to the
  * customer's external channel. WEB conversations are a no-op — the widget
@@ -46,6 +53,22 @@ export async function deliverToChannel(conversationId: string, text: string): Pr
       ? { lastOutboundAt: new Date(), status: "CONNECTED", lastError: null }
       : { status: "ERROR", lastError: result.error ?? "send_failed" },
   });
+
+  // Alert the team once per outage — on the healthy → failing transition,
+  // not on every failed retry
+  if (!result.ok && integration.status === "CONNECTED") {
+    await prisma.notification
+      .create({
+        data: {
+          organizationId: conversation.organizationId,
+          type: "URGENT",
+          title: `${CHANNEL_NAMES[conversation.channel] ?? conversation.channel} delivery is failing`,
+          body: `Customers may not be receiving replies (${result.error ?? "send failed"}). Check Integrations.`,
+          payload: { channel: conversation.channel, conversationId },
+        },
+      })
+      .catch(() => {});
+  }
 
   async function send(
     conv: NonNullable<typeof conversation>,
