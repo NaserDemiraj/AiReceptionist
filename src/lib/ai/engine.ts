@@ -75,7 +75,7 @@ export async function processCustomerMessage(
     where: { id: conversationId },
     include: {
       organization: { include: { aiConfig: true } },
-      customer: true,
+      customer: { include: { _count: { select: { conversations: true } } } },
       messages: { orderBy: { createdAt: "desc" }, take: HISTORY_LIMIT },
     },
   });
@@ -156,8 +156,23 @@ export async function processCustomerMessage(
       content: m.content,
     }));
 
+  // What we already know about this customer — so the AI doesn't re-ask
+  // and can greet returning visitors personally
+  const customerFacts: string[] = [];
+  if (conversation.customer.name) customerFacts.push(`their name is ${conversation.customer.name}`);
+  if (conversation.customer.phone) customerFacts.push("we already have their phone number");
+  if (conversation.customer.email) customerFacts.push("we already have their email");
+  if (conversation.customer._count.conversations > 1) {
+    customerFacts.push(
+      `they are a RETURNING customer (${conversation.customer._count.conversations} conversations with us) — welcome them back warmly`,
+    );
+  }
+
   const messages: ChatMessage[] = [
     { role: "system", content: buildSystemPrompt(org, config, categories.map((c) => c.name)) },
+    ...(customerFacts.length
+      ? [{ role: "system" as const, content: `About this customer: ${customerFacts.join("; ")}.` }]
+      : []),
     ...history,
     {
       role: "system",

@@ -68,7 +68,7 @@ export default async function ConversationsPage({
     orderBy: { updatedAt: "desc" },
     take: 50,
     include: {
-      customer: true,
+      customer: { include: { _count: { select: { conversations: true } } } },
       assignedTo: { select: { id: true, name: true } },
       messages: { orderBy: { createdAt: "desc" }, take: 1 },
     },
@@ -80,7 +80,7 @@ export default async function ConversationsPage({
     ? await prisma.conversation.findFirst({
         where: { id: selectedId, organizationId: org.id, ...visibility },
         include: {
-          customer: true,
+          customer: { include: { _count: { select: { conversations: true } } } },
           assignedTo: { select: { id: true, name: true } },
           messages: {
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -195,6 +195,14 @@ export default async function ConversationsPage({
                             <span className="text-[13px] font-semibold truncate">
                               {c.customer.name ?? "Web visitor"}
                             </span>
+                            {c.customer._count.conversations > 1 && (
+                              <span
+                                className="text-[9.5px] font-semibold uppercase tracking-wide text-accent bg-accent-soft rounded px-1 py-px shrink-0"
+                                title={`${c.customer._count.conversations} conversations with this customer`}
+                              >
+                                Returning
+                              </span>
+                            )}
                             <span className="ml-auto text-[10.5px] text-ink-soft shrink-0">
                               {format(c.updatedAt, "HH:mm")}
                             </span>
@@ -290,6 +298,9 @@ export default async function ConversationsPage({
                 </span>
                 <span className="font-mono text-[10.5px] text-ink-soft">
                   {CHANNEL_LABELS[selected.channel]} · {selected.language.toUpperCase()}
+                  {selected.customer._count.conversations > 1
+                    ? ` · returning (${selected.customer._count.conversations} conversations)`
+                    : ""}
                 </span>
                 <div className="flex-1" />
                 {role === "AGENT" ? (
