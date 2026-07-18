@@ -92,6 +92,7 @@ model User {
   quotes        Quote[]
   passwordResetTokens PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  assignedConversations Conversation[] @relation("AssignedConversations")
 }
 
 model Membership {
@@ -176,6 +177,9 @@ model Conversation {
   sentiment      Sentiment          @default(NEUTRAL)
   language       String             @default("en")
   subject        String? // short AI-generated topic, e.g. "Corner sofa inquiry"
+  // Team member handling this conversation. Agents only see their own +
+  // unassigned conversations; owners/admins see everything.
+  assignedToId String?
   // Analytics
   firstResponseMs Int?
   endedAt         DateTime?
@@ -187,11 +191,13 @@ model Conversation {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedTo   User?        @relation("AssignedConversations", fields: [assignedToId], references: [id], onDelete: SetNull)
   messages     Message[]
   leads        Lead[]
 
   @@index([organizationId, status])
   @@index([organizationId, createdAt])
+  @@index([organizationId, assignedToId])
 }
 
 model Message {

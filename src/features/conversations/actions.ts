@@ -4,18 +4,26 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
-import { notFound } from "@/lib/errors";
+import { forbidden, notFound } from "@/lib/errors";
 import { deliverToChannel } from "@/lib/channels/deliver";
 import { MESSAGES_PAGE_SIZE, type TranscriptMessage } from "./transcript";
 
 async function ownedConversation(conversationId: string) {
-  const { org, user } = await requireOrg();
+  const { org, user, role } = await requireOrg();
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, organizationId: org.id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, assignedToId: true },
   });
   if (!conversation) throw notFound("Conversation not found");
-  return { org, user, conversation };
+  // Agents may only act on their own or unassigned conversations
+  if (
+    role === "AGENT" &&
+    conversation.assignedToId !== null &&
+    conversation.assignedToId !== user.id
+  ) {
+    throw notFound("Conversation not found");
+  }
+  return { org, user, role, conversation };
 }
 
 const replySchema = z.object({
@@ -41,7 +49,11 @@ export async function sendAgentReply(formData: FormData): Promise<void> {
     }),
     prisma.conversation.update({
       where: { id: conversation.id },
-      data: { status: "HUMAN_ACTIVE" },
+      data: {
+        status: "HUMAN_ACTIVE",
+        // Replying claims the conversation if nobody owns it yet
+        ...(conversation.assignedToId === null ? { assignedToId: user.id } : {}),
+      },
     }),
   ]);
 
@@ -93,6 +105,52 @@ export async function resolveConversation(formData: FormData): Promise<void> {
     where: { id: conversation.id },
     data: { status: "RESOLVED", endedAt: new Date() },
   });
+  revalidatePath("/conversations");
+}
+
+const assignSchema = z.object({
+  conversationId: z.string().min(1),
+  // Empty string = unassign
+  memberId: z.string(),
+});
+
+/** Assign a conversation to a team member. Agents may only claim for
+ *  themselves; owners/admins can assign anyone (or unassign). */
+export async function assignConversation(formData: FormData): Promise<void> {
+  const { conversationId, memberId } = assignSchema.parse({
+    conversationId: formData.get("conversationId"),
+    memberId: formData.get("memberId") ?? "",
+  });
+  const { org, user, role, conversation } = await ownedConversation(conversationId);
+
+  const targetId = memberId || null;
+  if (role === "AGENT" && targetId !== user.id) {
+    throw forbidden("Agents can only assign conversations to themselves");
+  }
+  if (targetId) {
+    const member = await prisma.membership.findFirst({
+      where: { organizationId: org.id, userId: targetId },
+      select: { userId: true },
+    });
+    if (!member) throw notFound("That person isn't a member of this workspace");
+  }
+
+  await prisma.$transaction([
+    prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { assignedToId: targetId },
+    }),
+    prisma.auditLog.create({
+      data: {
+        organizationId: org.id,
+        userId: user.id,
+        action: targetId ? "conversation.assign" : "conversation.unassign",
+        entityType: "Conversation",
+        entityId: conversation.id,
+        metadata: targetId ? { assignedToId: targetId } : undefined,
+      },
+    }),
+  ]);
   revalidatePath("/conversations");
 }
 

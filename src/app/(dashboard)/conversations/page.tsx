@@ -6,6 +6,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { requireOrg } from "@/lib/org";
 import { prisma } from "@/lib/prisma";
 import { AgentComposer } from "@/features/conversations/components/agent-composer";
+import { assignConversation } from "@/features/conversations/actions";
 import { EarlierMessages } from "@/features/conversations/components/earlier-messages";
 import { MessageBubble } from "@/features/conversations/components/message-bubble";
 import { MESSAGES_PAGE_SIZE } from "@/features/conversations/transcript";
@@ -21,22 +22,35 @@ export const metadata = { title: "Conversations" };
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; status?: string }>;
+  searchParams: Promise<{ c?: string; status?: string; mine?: string }>;
 }) {
-  const { org } = await requireOrg();
+  const { org, user, role } = await requireOrg();
   const params = await searchParams;
 
   const statusFilter =
     params.status && params.status in CONVERSATION_STATUS_META
       ? (params.status as keyof typeof CONVERSATION_STATUS_META)
       : undefined;
+  const mineOnly = params.mine === "1";
+
+  // Agents only see unassigned conversations plus their own
+  const visibility =
+    role === "AGENT"
+      ? { OR: [{ assignedToId: null }, { assignedToId: user.id }] }
+      : {};
 
   const conversations = await prisma.conversation.findMany({
-    where: { organizationId: org.id, ...(statusFilter ? { status: statusFilter } : {}) },
+    where: {
+      organizationId: org.id,
+      ...visibility,
+      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(mineOnly ? { assignedToId: user.id } : {}),
+    },
     orderBy: { updatedAt: "desc" },
     take: 50,
     include: {
       customer: true,
+      assignedTo: { select: { id: true, name: true } },
       messages: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
@@ -45,9 +59,10 @@ export default async function ConversationsPage({
   // Only the latest page of the transcript — history loads on demand
   const selected = selectedId
     ? await prisma.conversation.findFirst({
-        where: { id: selectedId, organizationId: org.id },
+        where: { id: selectedId, organizationId: org.id, ...visibility },
         include: {
           customer: true,
+          assignedTo: { select: { id: true, name: true } },
           messages: {
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             take: MESSAGES_PAGE_SIZE + 1, // sentinel row → "load earlier" button
@@ -56,6 +71,16 @@ export default async function ConversationsPage({
         },
       })
     : null;
+
+  // Members list for the assignment dropdown (owners/admins assign anyone)
+  const members =
+    role === "AGENT"
+      ? []
+      : await prisma.membership.findMany({
+          where: { organizationId: org.id },
+          select: { user: { select: { id: true, name: true } } },
+          orderBy: { createdAt: "asc" },
+        });
   const hasEarlier = (selected?.messages.length ?? 0) > MESSAGES_PAGE_SIZE;
   const transcript = (selected?.messages ?? [])
     .slice(0, MESSAGES_PAGE_SIZE)
@@ -69,11 +94,13 @@ export default async function ConversationsPage({
     }));
 
   const filters = [
-    { key: undefined, label: "All" },
-    { key: "AI_ACTIVE", label: "AI handling" },
-    { key: "NEEDS_HUMAN", label: "Needs human" },
-    { key: "RESOLVED", label: "Resolved" },
-  ] as const;
+    { href: "/conversations", label: "All", active: !statusFilter && !mineOnly },
+    { href: "/conversations?mine=1", label: "Mine", active: mineOnly },
+    { href: "/conversations?status=AI_ACTIVE", label: "AI handling", active: statusFilter === "AI_ACTIVE" },
+    { href: "/conversations?status=NEEDS_HUMAN", label: "Needs human", active: statusFilter === "NEEDS_HUMAN" },
+    { href: "/conversations?status=RESOLVED", label: "Resolved", active: statusFilter === "RESOLVED" },
+  ];
+  const listQuery = `${statusFilter ? `&status=${statusFilter}` : ""}${mineOnly ? "&mine=1" : ""}`;
 
   return (
     <>
@@ -86,10 +113,10 @@ export default async function ConversationsPage({
             {filters.map((f) => (
               <Link
                 key={f.label}
-                href={f.key ? `/conversations?status=${f.key}` : "/conversations"}
+                href={f.href}
                 className={cx(
                   "px-2.5 py-1 rounded-lg text-[12px] font-medium",
-                  statusFilter === f.key || (!statusFilter && !f.key)
+                  f.active
                     ? "bg-accent-soft text-accent font-semibold"
                     : "text-ink-mid hover:bg-hover",
                 )}
@@ -112,7 +139,7 @@ export default async function ConversationsPage({
                 return (
                   <Link
                     key={c.id}
-                    href={`/conversations?c=${c.id}${statusFilter ? `&status=${statusFilter}` : ""}`}
+                    href={`/conversations?c=${c.id}${listQuery}`}
                     className={cx(
                       "flex gap-3 px-4 py-3 border-b border-line",
                       active ? "bg-accent-soft/50" : "hover:bg-row-hover",
@@ -138,6 +165,11 @@ export default async function ConversationsPage({
                         <span className="font-mono text-[10px] text-ink-soft">
                           {CHANNEL_LABELS[c.channel]}
                         </span>
+                        {c.assignedTo && (
+                          <span className="ml-auto text-[10px] text-ink-soft truncate max-w-[80px]">
+                            {c.assignedTo.id === user.id ? "You" : c.assignedTo.name}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </Link>
@@ -167,6 +199,44 @@ export default async function ConversationsPage({
                   {CHANNEL_LABELS[selected.channel]} · {selected.language.toUpperCase()}
                 </span>
                 <div className="flex-1" />
+                {role === "AGENT" ? (
+                  selected.assignedTo ? (
+                    <span className="text-[11.5px] text-ink-mid">Assigned to you</span>
+                  ) : (
+                    <form action={assignConversation}>
+                      <input type="hidden" name="conversationId" value={selected.id} />
+                      <input type="hidden" name="memberId" value={user.id} />
+                      <button
+                        type="submit"
+                        className="text-[11.5px] font-medium text-accent bg-accent-soft hover:bg-accent-soft/70 rounded-lg px-2.5 py-1 cursor-pointer"
+                      >
+                        Claim
+                      </button>
+                    </form>
+                  )
+                ) : (
+                  <form action={assignConversation} className="flex items-center gap-1.5">
+                    <input type="hidden" name="conversationId" value={selected.id} />
+                    <select
+                      name="memberId"
+                      defaultValue={selected.assignedTo?.id ?? ""}
+                      className="h-7 text-[11.5px] bg-hover border border-line rounded-lg px-1.5"
+                    >
+                      <option value="">Unassigned</option>
+                      {members.map((m) => (
+                        <option key={m.user.id} value={m.user.id}>
+                          {m.user.id === user.id ? `${m.user.name} (you)` : m.user.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="submit"
+                      className="text-[11.5px] font-medium text-accent bg-accent-soft hover:bg-accent-soft/70 rounded-lg px-2.5 py-1 cursor-pointer"
+                    >
+                      Assign
+                    </button>
+                  </form>
+                )}
                 <Badge tone={SENTIMENT_META[selected.sentiment].tone}>
                   {SENTIMENT_META[selected.sentiment].label}
                 </Badge>
