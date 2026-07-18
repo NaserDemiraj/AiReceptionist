@@ -7,6 +7,7 @@ import { prisma } from "./prisma";
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  totp: z.string().optional(),
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -14,7 +15,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: { signIn: "/login" },
   providers: [
     Credentials({
-      credentials: { email: {}, password: {} },
+      credentials: { email: {}, password: {}, totp: {} },
       async authorize(credentials) {
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
@@ -27,6 +28,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const valid = await compare(parsed.data.password, user.passwordHash);
         if (!valid) return null;
+
+        // 2FA enforced here too — the login form pre-checks for friendly
+        // errors, but this is the gate a direct POST can't skip
+        if (user.totpEnabledAt && user.totpSecret) {
+          const { verifyTotp } = await import("./totp");
+          if (!parsed.data.totp || !verifyTotp(user.totpSecret, parsed.data.totp)) {
+            return null;
+          }
+        }
 
         const membership = user.memberships[0];
         return {

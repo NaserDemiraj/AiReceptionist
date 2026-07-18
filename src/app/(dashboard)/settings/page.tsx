@@ -7,11 +7,12 @@ import { OrgProfileForm } from "@/features/settings/components/org-profile-form"
 import { WidgetSettingsForm } from "@/features/settings/components/widget-settings-form";
 import { RotateKeyButton } from "@/features/settings/components/rotate-key-button";
 import { ChangePasswordForm } from "@/features/settings/components/change-password-form";
+import { TwoFactorCard } from "@/features/settings/components/two-factor-card";
 
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
-  const { org } = await requireOrg();
+  const { org, user } = await requireOrg();
   const baseUrl = await getBaseUrl();
   const config =
     (await prisma.aiConfig.findUnique({ where: { organizationId: org.id } })) ??
@@ -69,6 +70,14 @@ export default async function SettingsPage() {
               Change the password you use to sign in.
             </p>
             <ChangePasswordForm />
+          </Card>
+
+          <Card className="p-6">
+            <h2 className="text-[15px] font-semibold mb-1">Two-factor authentication</h2>
+            <p className="text-[12.5px] text-ink-mid mb-5">
+              Protect your account with a 6-digit code from an authenticator app.
+            </p>
+            <TwoFactorCard enabled={Boolean(user.totpEnabledAt)} />
           </Card>
         </div>
       </div>

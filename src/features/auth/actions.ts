@@ -152,21 +152,51 @@ export async function verifyEmailToken(rawToken: string): Promise<"verified" | "
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email"),
   password: z.string().min(1, "Please enter your password"),
+  totp: z.string().optional(),
 });
 
+export type LoginFormState = (AuthFormState & { totpRequired?: boolean }) | undefined;
+
 export async function login(
-  _prev: AuthFormState,
+  _prev: LoginFormState,
   formData: FormData,
-): Promise<AuthFormState> {
+): Promise<LoginFormState> {
   const parsed = loginSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
+  }
+
+  // Throttle both password guessing and 6-digit code brute-forcing
+  const { headers } = await import("next/headers");
+  const { rateLimit } = await import("@/lib/rate-limit");
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0] ?? "local";
+  const attempt = await rateLimit(`login:${ip}:${parsed.data.email.toLowerCase()}`, 10, 15 * 60_000);
+  if (!attempt.allowed) {
+    return { error: "Too many attempts — try again in a few minutes." };
+  }
+
+  // 2FA gate — only after the password checks out, so nothing leaks earlier
+  const user = await prisma.user.findUnique({
+    where: { email: parsed.data.email.toLowerCase() },
+    select: { passwordHash: true, totpSecret: true, totpEnabledAt: true },
+  });
+  if (user && (await compare(parsed.data.password, user.passwordHash))) {
+    if (user.totpEnabledAt && user.totpSecret) {
+      if (!parsed.data.totp) {
+        return { totpRequired: true };
+      }
+      const { verifyTotp } = await import("@/lib/totp");
+      if (!verifyTotp(user.totpSecret, parsed.data.totp)) {
+        return { totpRequired: true, error: "Invalid authentication code." };
+      }
+    }
   }
 
   try {
     await signIn("credentials", {
       email: parsed.data.email,
       password: parsed.data.password,
+      totp: parsed.data.totp ?? "",
       redirect: false,
     });
   } catch (err) {
@@ -218,6 +248,69 @@ export async function changePassword(
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
 
   logger.info({ email: user.email }, "password changed");
+  return { success: true };
+}
+
+/* ---------- Two-factor auth (TOTP) ---------- */
+
+export type TotpFormState =
+  | { error?: string; success?: boolean; secret?: string; authUrl?: string }
+  | undefined;
+
+/** Step 1: generate a pending secret and show it for the authenticator app. */
+export async function startTotpEnrollment(): Promise<TotpFormState> {
+  const { requireOrg } = await import("@/lib/org");
+  const { user } = await requireOrg();
+  if (user.totpEnabledAt) return { error: "Two-factor auth is already enabled." };
+
+  const { generateTotpSecret, totpAuthUrl } = await import("@/lib/totp");
+  const secret = generateTotpSecret();
+  await prisma.user.update({ where: { id: user.id }, data: { totpSecret: secret } });
+  return { secret, authUrl: totpAuthUrl(secret, user.email) };
+}
+
+/** Step 2: the user proves the app works by entering a valid code. */
+export async function confirmTotpEnrollment(
+  _prev: TotpFormState,
+  formData: FormData,
+): Promise<TotpFormState> {
+  const { requireOrg } = await import("@/lib/org");
+  const { user } = await requireOrg();
+  if (user.totpEnabledAt) return { error: "Two-factor auth is already enabled." };
+  if (!user.totpSecret) return { error: "Start the setup first." };
+
+  const code = String(formData.get("code") ?? "");
+  const { verifyTotp } = await import("@/lib/totp");
+  if (!verifyTotp(user.totpSecret, code)) {
+    return { error: "That code didn't match — check the app and try again." };
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { totpEnabledAt: new Date() },
+  });
+  logger.info({ email: user.email }, "2FA enabled");
+  return { success: true };
+}
+
+/** Disabling requires the account password, not just a session. */
+export async function disableTotp(
+  _prev: TotpFormState,
+  formData: FormData,
+): Promise<TotpFormState> {
+  const { requireOrg } = await import("@/lib/org");
+  const { user } = await requireOrg();
+  if (!user.totpEnabledAt) return { success: true };
+
+  const password = String(formData.get("password") ?? "");
+  const ok = await compare(password, user.passwordHash);
+  if (!ok) return { error: "Wrong password." };
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { totpSecret: null, totpEnabledAt: null },
+  });
+  logger.info({ email: user.email }, "2FA disabled");
   return { success: true };
 }
 
