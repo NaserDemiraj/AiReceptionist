@@ -6,6 +6,10 @@ import { deliverToChannel } from "@/lib/channels/deliver";
 import { emptyTwiml } from "@/lib/channels/twilio";
 import { normalizePhone, readTwilioWebhook } from "@/lib/channels/twilio-webhook";
 
+// Webhook processing runs the LLM reply inside the request — give it room
+export const maxDuration = 60;
+
+
 /**
  * POST /api/v1/channels/twilio/[integrationId]/sms
  * Inbound SMS from a customer — the AI answers over SMS.

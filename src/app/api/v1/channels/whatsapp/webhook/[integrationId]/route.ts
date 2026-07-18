@@ -10,6 +10,10 @@ import {
   type InboundWhatsAppMessage,
 } from "@/lib/channels/whatsapp";
 
+// Webhook processing runs the LLM reply inside the request — give it room
+export const maxDuration = 60;
+
+
 /**
  * WhatsApp Cloud API webhook, one URL per tenant:
  * /api/v1/channels/whatsapp/webhook/[integrationId]

@@ -11,6 +11,10 @@ import {
 } from "@/lib/channels/messenger";
 import type { Channel } from "@prisma/client";
 
+// Webhook processing runs the LLM reply inside the request — give it room
+export const maxDuration = 60;
+
+
 /**
  * Messenger webhook, one URL per tenant + channel row:
  * /api/v1/channels/messenger/webhook/[integrationId]

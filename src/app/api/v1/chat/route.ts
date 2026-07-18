@@ -9,6 +9,9 @@ import { getPublicCorsHeaders } from "@/lib/cors";
 const CORS_HEADERS = getPublicCorsHeaders();
 // Public widget endpoint: rate-limited by IP + widgetKey, no sensitive data exposed
 
+// LLM tool-use loop can take a while — don't let Vercel kill the reply
+export const maxDuration = 60;
+
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }

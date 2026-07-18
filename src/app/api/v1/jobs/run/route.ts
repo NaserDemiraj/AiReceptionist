@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { runAutomations } from "@/lib/jobs";
 import { errorResponse, unauthorized } from "@/lib/errors";
 
+// Batch job: sends reminders + follow-ups across all orgs — give it room
+export const maxDuration = 60;
+
+
 /**
  * /api/v1/jobs/run — cron entry point.
  * POST: any scheduler with `Authorization: Bearer $JOBS_SECRET`.
