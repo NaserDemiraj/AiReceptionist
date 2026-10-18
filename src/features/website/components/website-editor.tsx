@@ -163,7 +163,7 @@ export function WebsiteEditor({ initial }: { initial: WebsiteEditorValues }) {
               name="seoTitle"
               maxLength={70}
               defaultValue={initial.seoTitle}
-              placeholder="MAMAJ Furniture — Quality furniture in Tirana"
+              placeholder="Your Business — what you do, and where"
             />
           </Field>
           <Field label="Meta description (max 170 chars)">

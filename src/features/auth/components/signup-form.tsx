@@ -40,7 +40,7 @@ export function SignupForm() {
         />
       </Field>
       <Field label="Business name">
-        <Input name="businessName" placeholder="MAMAJ Furniture" required autoComplete="organization" />
+        <Input name="businessName" placeholder="Your business name" required autoComplete="organization" />
       </Field>
       <Field label="Industry">
         <Select name="industry" defaultValue="furniture">
