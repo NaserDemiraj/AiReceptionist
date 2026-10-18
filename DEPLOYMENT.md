@@ -12,7 +12,7 @@ Stack: **Vercel** (app + cron) + **Supabase** (Postgres with pgvector). Total se
    ```
    cd app
    npx prisma migrate deploy
-   npm run db:seed   # optional demo data (fictional Nordwood Furniture)
+   npm run db:seed   # optional demo data (MAMAJ Furniture)
    ```
    The `knowledge_embeddings` migration enables the `vector` extension automatically.
 4. Enable daily backups (Settings → Database → Backups — on by default for paid plans).

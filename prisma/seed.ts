@@ -1,11 +1,11 @@
 /**
  * Seeds two tenants:
- *  1. Nordwood Furniture — the flagship demo org with a full furniture catalog,
+ *  1. MAMAJ Furniture — the flagship demo org with a full furniture catalog,
  *     conversations, leads, appointments, and notifications.
  *  2. DentaCare — a second org whose data must NEVER appear when logged
- *     into Nordwood (multi-tenancy verification).
+ *     into MAMAJ (multi-tenancy verification).
  *
- * Login: demo@nordwood.example / demo1234
+ * Login: demo@mamaj.com / mamaj1234
  */
 import { PrismaClient } from "@prisma/client";
 import { hash } from "bcryptjs";
@@ -27,31 +27,31 @@ async function main() {
   await prisma.user.deleteMany();
 
   console.log("Creating users…");
-  const password = await hash("demo1234", 12);
+  const password = await hash("mamaj1234", 12);
   const owner = await prisma.user.create({
-    data: { email: "demo@nordwood.example", passwordHash: password, name: "Blerta Mema" },
+    data: { email: "demo@mamaj.com", passwordHash: password, name: "Blerta Mema" },
   });
   const agent = await prisma.user.create({
-    data: { email: "ardit@nordwood.example", passwordHash: password, name: "Ardit Hoxha" },
+    data: { email: "ardit@mamaj.com", passwordHash: password, name: "Ardit Hoxha" },
   });
   const otherOwner = await prisma.user.create({
-    data: { email: "demo@dentacare.example", passwordHash: password, name: "Elira Shala" },
+    data: { email: "demo@dentacare.com", passwordHash: password, name: "Elira Shala" },
   });
 
-  console.log("Creating Nordwood Furniture…");
+  console.log("Creating MAMAJ Furniture…");
   const org = await prisma.organization.create({
     data: {
-      name: "Nordwood Furniture",
-      slug: "nordwood-furniture",
+      name: "MAMAJ Furniture",
+      slug: "mamaj-furniture",
       industry: "furniture",
       planTier: "BUSINESS",
       defaultLanguage: "en",
       languages: ["en", "sq", "de"],
       timezone: "Europe/Tirane",
       currency: "EUR",
-      website: "https://nordwood.example",
+      website: "https://mamaj-furniture.com",
       phone: "+355 69 204 5566",
-      email: "hello@nordwood.example",
+      email: "hello@mamaj-furniture.com",
       address: "Rruga e Kavajës 112, Tirana",
       memberships: {
         create: [
@@ -62,9 +62,9 @@ async function main() {
       aiConfig: {
         create: {
           assistantName: "Sara",
-          greeting: "Hi! I'm Sara from Nordwood Furniture 👋 How can I help you today?",
+          greeting: "Hi! I'm Sara from MAMAJ Furniture 👋 How can I help you today?",
           instructions:
-            "You are the receptionist for Nordwood Furniture, a family furniture store in Tirana. Delivery within Albania takes 3-7 days. Assembly is free for orders over €500. All products carry a 24-month warranty. Payment: cash, card, or 12-month installments.",
+            "You are the receptionist for MAMAJ Furniture, a family furniture store in Tirana. Delivery within Albania takes 3-7 days. Assembly is free for orders over €500. All products carry a 24-month warranty. Payment: cash, card, or 12-month installments.",
           tone: "friendly-professional",
         },
       },
@@ -260,7 +260,7 @@ async function main() {
       messages: {
         create: [
           { role: "SYSTEM", content: "Missed call detected at 14:32 — recovery SMS sent", createdAt: hoursAgo(8) },
-          { role: "AI", content: "Përshëndetje! Na vjen keq që humbëm telefonatën tuaj në Nordwood Furniture. Si mund t'ju ndihmojmë?", createdAt: hoursAgo(8) },
+          { role: "AI", content: "Përshëndetje! Na vjen keq që humbëm telefonatën tuaj në MAMAJ Furniture. Si mund t'ju ndihmojmë?", createdAt: hoursAgo(8) },
           { role: "CUSTOMER", content: "Doja të pyesja për dollapët me dyer rrëshqitëse.", createdAt: hoursAgo(7) },
           { role: "AI", content: "Kemi Nova Sliding Wardrobe (220cm, me pasqyrë) tani me ulje €749 nga €840. Dëshironi më shumë detaje apo një vizitë në showroom?", createdAt: hoursAgo(7) },
         ],
@@ -286,7 +286,7 @@ async function main() {
           { role: "CUSTOMER", content: "Meine Lieferung ist schon 3 Tage zu spät. Das ist inakzeptabel!", createdAt: hoursAgo(26) },
           { role: "AI", content: "Das tut mir wirklich leid, Emma. Ich verstehe Ihren Ärger. Ich habe Ihre Bestellung gefunden und leite Sie sofort an unser Team weiter — Sie erhalten innerhalb von 30 Minuten eine Antwort.", createdAt: hoursAgo(26) },
           { role: "SYSTEM", content: "Negative sentiment detected — escalated to team", createdAt: hoursAgo(26) },
-          { role: "AGENT", content: "Hallo Emma, hier ist Ardit von Nordwood. Ihre Lieferung kommt morgen zwischen 9-12 Uhr. Als Entschuldigung schenken wir Ihnen die Liefergebühr und einen 10% Gutschein.", agentId: agent.id, createdAt: hoursAgo(3) },
+          { role: "AGENT", content: "Hallo Emma, hier ist Ardit von MAMAJ. Ihre Lieferung kommt morgen zwischen 9-12 Uhr. Als Entschuldigung schenken wir Ihnen die Liefergebühr und einen 10% Gutschein.", agentId: agent.id, createdAt: hoursAgo(3) },
         ],
       },
     },
@@ -486,7 +486,7 @@ async function main() {
       customerId: dentaCustomer.id,
       channel: "WEB",
       status: "AI_ACTIVE",
-      subject: "Teeth whitening pricing — MUST NOT appear in Nordwood",
+      subject: "Teeth whitening pricing — MUST NOT appear in MAMAJ",
       messages: {
         create: [{ role: "CUSTOMER", content: "How much is teeth whitening?" }],
       },
@@ -494,9 +494,9 @@ async function main() {
   });
 
   console.log("\nSeed complete ✔");
-  console.log("  Nordwood login: demo@nordwood.example / demo1234");
-  console.log("  Agent login:    ardit@nordwood.example / demo1234");
-  console.log("  DentaCare login: demo@dentacare.example / demo1234");
+  console.log("  MAMAJ login:    demo@mamaj.com / mamaj1234");
+  console.log("  Agent login:    ardit@mamaj.com / mamaj1234");
+  console.log("  DentaCare login: demo@dentacare.com / mamaj1234");
 }
 
 main()

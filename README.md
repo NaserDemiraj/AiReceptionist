@@ -6,7 +6,7 @@ appointments, answers policy questions from a knowledge base, follows up automat
 hands off to humans when needed. Businesses also get a generated public website with the
 assistant built in.
 
-Demo data: **Nordwood Furniture**, a fictional furniture store (plus a fictional dental clinic for tenancy tests). Languages: English,
+First flagship tenant: **MAMAJ Furniture** (demo data included). Languages: English,
 Albanian, German (auto-detected per message).
 
 ## Stack
@@ -26,7 +26,7 @@ Albanian, German (auto-detected per message).
 npm install
 cp .env.example .env      # fill in the values below
 npx prisma migrate dev    # creates all tables
-npm run db:seed           # loads the Nordwood Furniture demo tenant
+npm run db:seed           # loads the MAMAJ Furniture demo tenant
 npm run dev               # http://localhost:3000
 ```
 
@@ -41,14 +41,14 @@ npm run dev               # http://localhost:3000
 
 | Role | Email | Password |
 |---|---|---|
-| Owner (Nordwood) | `demo@nordwood.example` | `demo1234` |
-| Agent (Nordwood) | `ardit@nordwood.example` | `demo1234` |
-| Second tenant | `demo@dentacare.example` | `demo1234` |
+| Owner (MAMAJ) | `demo@mamaj.com` | `mamaj1234` |
+| Agent (MAMAJ) | `ardit@mamaj.com` | `mamaj1234` |
+| Second tenant | `demo@dentacare.com` | `mamaj1234` |
 
 ### Things to try
 
 - `/demo` — a fake storefront with the embeddable chat widget; talk to the AI
-- `/site/nordwood-furniture` — the generated public website (Website Builder output)
+- `/site/mamaj-furniture` — the generated public website (Website Builder output)
 - Dashboard → Conversations — take over a chat from the AI as a human agent
 - Dashboard → Knowledge Base — add an FAQ, then ask the widget about it
 

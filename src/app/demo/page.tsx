@@ -5,7 +5,7 @@ export const metadata = { title: "Widget demo" };
 
 /**
  * Fake customer-facing store page used to try the chat widget.
- * /demo          → DEMO_ORG_SLUG if set, otherwise the oldest organization
+ * /demo          → DEMO_ORG_SLUG if set, otherwise the oldest organization (the seeded MAMAJ demo)
  * /demo?org=slug → any specific tenant
  */
 export default async function DemoPage({
