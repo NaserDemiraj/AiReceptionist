@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { captureError } from "@/lib/sentry";
 import { detectLanguage, detectSentiment } from "./language";
+import { resolveModel } from "./models";
 import { getProvider, type ChatMessage } from "./provider";
 import { TOOL_DEFINITIONS, executeTool, type ProductCard, type ToolContext } from "./tools";
 
@@ -190,6 +191,7 @@ export async function processCustomerMessage(
   };
 
   const provider = getProvider(config.provider as "GROQ" | "OPENAI");
+  const model = resolveModel(config.model, config.provider);
   const started = Date.now();
   let reply: string | null = null;
   // Debug trace: which tools ran with which arguments (rendered to admins)
@@ -198,7 +200,7 @@ export async function processCustomerMessage(
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     try {
       const result = await provider.chat(messages, {
-        model: config.model,
+        model,
         temperature: config.temperature,
         tools: TOOL_DEFINITIONS,
       });
@@ -224,7 +226,7 @@ export async function processCustomerMessage(
         context: "ai_engine_llm_call",
         conversationId,
         round,
-        model: config.model,
+        model,
       });
       logger.error({ err, conversationId, round }, "LLM call failed");
       if (round === 0) {
