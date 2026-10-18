@@ -16,7 +16,7 @@ Albanian, German (auto-detected per message).
 | App | Next.js (App Router) + TypeScript + Tailwind v4 |
 | Database | PostgreSQL (Supabase) + Prisma ORM |
 | Auth | Auth.js v5 (credentials, JWT, org-scoped sessions) |
-| AI | Groq (`llama-3.3-70b`) behind a provider-agnostic adapter (OpenAI-compatible; Anthropic/Google addable) |
+| AI | Groq (`openai/gpt-oss-120b`, low reasoning effort) behind a provider-agnostic adapter (OpenAI-compatible; Anthropic/Google addable). `GROQ_MODEL` overrides every org; retired models are upgraded automatically (`src/lib/ai/models.ts`) |
 | PDF | pdf-lib (quote generation) |
 | Tests | Vitest |
 
