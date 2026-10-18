@@ -1,3 +1,5 @@
+import { reasoningParams } from "./models";
+
 /**
  * Provider-agnostic LLM layer.
  *
@@ -114,6 +116,7 @@ export class OpenAiCompatibleProvider implements ChatProvider {
       model: options.model,
       temperature: options.temperature ?? 0.4,
       max_tokens: options.maxTokens ?? 1024,
+      ...reasoningParams(options.model),
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,
