@@ -445,7 +445,7 @@ model AiConfig {
   id             String     @id @default(cuid())
   organizationId String     @unique
   provider       AiProvider @default(GROQ)
-  model          String     @default("llama-3.3-70b-versatile")
+  model          String     @default("openai/gpt-oss-120b")
   temperature    Float      @default(0.4)
   // Persona
   assistantName String @default("Aria")
