@@ -5,17 +5,19 @@ export const metadata = { title: "Widget demo" };
 
 /**
  * Fake customer-facing store page used to try the chat widget.
- * /demo          → uses the MAMAJ Furniture demo tenant
- * /demo?org=slug → any other tenant
+ * /demo          → DEMO_ORG_SLUG if set, otherwise the oldest organization (the seeded MAMAJ demo)
+ * /demo?org=slug → any specific tenant
  */
 export default async function DemoPage({
   searchParams,
 }: {
   searchParams: Promise<{ org?: string }>;
 }) {
-  const { org: slug } = await searchParams;
+  const { org: requested } = await searchParams;
+  const slug = requested ?? process.env.DEMO_ORG_SLUG;
   const org = await prisma.organization.findFirst({
-    where: slug ? { slug } : { slug: "mamaj-furniture" },
+    where: slug ? { slug } : undefined,
+    orderBy: { createdAt: "asc" },
     include: { aiConfig: true },
   });
 

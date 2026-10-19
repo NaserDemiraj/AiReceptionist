@@ -156,12 +156,12 @@ async function main() {
 
   console.log("Creating customers & conversations…");
   const customersData = [
-    { name: "Andi Leka", phone: "+355 68 300 1122", email: "andi.leka@gmail.com", language: "sq" },
+    { name: "Andi Leka", phone: "+355 68 300 1122", email: "andi.leka@example.com", language: "sq" },
     { name: "Miriam Weber", phone: "+49 171 555 8341", email: "m.weber@web.de", language: "de" },
-    { name: "Sara Kola", phone: "+355 69 411 7788", email: "sara.kola@outlook.com", language: "en" },
+    { name: "Sara Kola", phone: "+355 69 411 7788", email: "sara.kola@example.com", language: "en" },
     { name: "Genti Prela", phone: "+355 67 220 3344", email: null, language: "sq" },
-    { name: "Emma Hoffmann", phone: null, email: "emma.h@gmail.com", language: "de" },
-    { name: "Luis Marku", phone: "+355 69 909 1010", email: "luis.marku@gmail.com", language: "en" },
+    { name: "Emma Hoffmann", phone: null, email: "emma.h@example.com", language: "de" },
+    { name: "Luis Marku", phone: "+355 69 909 1010", email: "luis.marku@example.com", language: "en" },
     { name: null, phone: null, email: null, language: "en", visitorId: "anon-4f8a2" },
   ];
   const customers = [];
