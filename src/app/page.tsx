@@ -199,9 +199,9 @@ export default function LandingPage() {
         {/* stat row */}
         <div className="flex justify-center mt-14 flex-wrap max-w-[760px] mx-auto">
           {[
-            ["86%", "of chats resolved without staff"],
-            ["1.4s", "average response time"],
-            ["+31%", "revenue influenced"],
+            ["24/7", "answers, nights and weekends"],
+            ["3", "languages, detected per message"],
+            ["1-click", "handoff to a human agent"],
           ].map(([stat, label], i) => (
             <div
               key={stat}
@@ -217,14 +217,14 @@ export default function LandingPage() {
       {/* TRUST */}
       <section className="py-[34px] px-10 border-b border-[#F0F0F2]">
         <div className="text-center text-[12px] font-mono text-ink-soft tracking-[0.08em] uppercase mb-[22px]">
-          Trusted by growing businesses across 10+ industries
+          Built for businesses that live on customer questions
         </div>
         <div className="flex gap-11 justify-center items-center flex-wrap opacity-55">
-          <span className="font-display font-bold text-[19px] tracking-wider">MAMAJ</span>
-          <span className="font-bold text-[17px]">DentaCare</span>
-          <span className="font-bold text-[17px] italic">Bella Salon</span>
-          <span className="font-bold text-[17px]">FitZone</span>
-          <span className="font-bold text-[17px] tracking-[0.1em]">NOVA REALTY</span>
+          <span className="font-bold text-[17px]">Furniture stores</span>
+          <span className="font-bold text-[17px]">Dental clinics</span>
+          <span className="font-bold text-[17px]">Salons</span>
+          <span className="font-bold text-[17px]">Gyms</span>
+          <span className="font-bold text-[17px]">Real estate</span>
         </div>
       </section>
 
@@ -341,19 +341,12 @@ export default function LandingPage() {
       <section className="px-6 lg:px-10 pb-20">
         <div className="max-w-[820px] mx-auto bg-[#FBFBFC] border border-[#EEEEF0] rounded-[20px] px-8 md:px-12 py-11 text-center">
           <div className="font-display text-[20px] md:text-[24px] font-medium leading-[1.45] tracking-[-0.01em]">
-            &ldquo;It genuinely feels like we hired another salesperson. Sara books showroom
-            visits while we sleep — we recovered{" "}
-            <span className="text-accent">€42k in influenced sales</span> in the first month
-            alone.&rdquo;
+            Like hiring another salesperson who never sleeps. Sara answers product questions,{" "}
+            <span className="text-accent">books visits and captures leads</span>, and hands the
+            conversation to your team the moment a human is needed.
           </div>
-          <div className="flex items-center justify-center gap-3 mt-[26px]">
-            <div className="w-11 h-11 rounded-full bg-[#E9E8F9] text-accent flex items-center justify-center font-semibold text-[15px]">
-              BM
-            </div>
-            <div className="text-left">
-              <div className="text-[14px] font-semibold">Blerta Mema</div>
-              <div className="text-[12.5px] text-ink-soft">Owner, MAMAJ Furniture</div>
-            </div>
+          <div className="text-[12.5px] font-mono text-ink-soft tracking-[0.08em] uppercase mt-[26px]">
+            English, Albanian and German · around the clock
           </div>
         </div>
       </section>
