@@ -72,7 +72,10 @@ export async function processCustomerMessage(
     messageMetadata?: Record<string, string>;
   },
 ): Promise<EngineResult> {
+  // One round trip: a JOIN instead of one query per relation. Latency to the
+  // database (e.g. a hosted Postgres in another region) multiplies every query.
   const conversation = await prisma.conversation.findUniqueOrThrow({
+    relationLoadStrategy: "join",
     where: { id: conversationId },
     include: {
       organization: { include: { aiConfig: true } },
@@ -95,35 +98,38 @@ export async function processCustomerMessage(
   const sentiment = detectSentiment(text);
   const isFirstCustomerMessage = !conversation.messages.some((m) => m.role === "CUSTOMER");
 
-  await prisma.message.create({
-    data: {
-      conversationId,
-      role: "CUSTOMER",
-      content: text,
-      ...(options?.messageMetadata ? { metadata: options.messageMetadata } : {}),
-    },
-  });
-
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      language,
-      ...(sentiment !== "NEUTRAL" ? { sentiment } : {}),
-      ...(isFirstCustomerMessage ? { subject: text.slice(0, 80) } : {}),
-    },
-  });
-
-  if (sentiment === "NEGATIVE") {
-    await prisma.notification.create({
+  // Independent writes: run them concurrently instead of one round trip each.
+  await Promise.all([
+    prisma.message.create({
       data: {
-        organizationId: org.id,
-        type: "NEGATIVE_SENTIMENT",
-        title: "Upset customer detected",
-        body: text.slice(0, 140),
-        payload: { conversationId },
+        conversationId,
+        role: "CUSTOMER",
+        content: text,
+        ...(options?.messageMetadata ? { metadata: options.messageMetadata } : {}),
       },
-    });
-  }
+    }),
+    prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        language,
+        ...(sentiment !== "NEUTRAL" ? { sentiment } : {}),
+        ...(isFirstCustomerMessage ? { subject: text.slice(0, 80) } : {}),
+      },
+    }),
+    ...(sentiment === "NEGATIVE"
+      ? [
+          prisma.notification.create({
+            data: {
+              organizationId: org.id,
+              type: "NEGATIVE_SENTIMENT",
+              title: "Upset customer detected",
+              body: text.slice(0, 140),
+              payload: { conversationId },
+            },
+          }),
+        ]
+      : []),
+  ]);
 
   // A human has taken over — don't answer over them. (NEEDS_HUMAN still gets
   // AI replies so the customer isn't left hanging while they wait.)
@@ -137,16 +143,17 @@ export async function processCustomerMessage(
   // Plan gate: expired trial / cancelled subscription / monthly quota.
   // The message is stored either way so nothing is lost after an upgrade.
   const { checkAiUsage } = await import("@/lib/billing/plans");
-  const usage = await checkAiUsage(org.id);
+  const [usage, categories] = await Promise.all([
+    checkAiUsage(org.id),
+    prisma.productCategory.findMany({
+      where: { organizationId: org.id },
+      select: { name: true },
+    }),
+  ]);
   if (!usage.allowed) {
     logger.warn({ orgId: org.id, reason: usage.reason }, "AI reply blocked by plan");
     return { reply: null, products: [], status: conversation.status };
   }
-
-  const categories = await prisma.productCategory.findMany({
-    where: { organizationId: org.id },
-    select: { name: true },
-  });
 
   const history: ChatMessage[] = conversation.messages
     .slice()
@@ -250,31 +257,34 @@ export async function processCustomerMessage(
           : "Sorry, I hit a technical snag. A team member will reply here shortly!";
   }
 
-  await prisma.message.create({
-    data: {
-      conversationId,
-      role: "AI",
-      content: reply,
-      metadata: {
-        toolsUsed,
-        latencyMs: Date.now() - started,
-        ...(ctx.lastProducts.length ? { products: JSON.parse(JSON.stringify(ctx.lastProducts)) } : {}),
+  // Save the reply and, concurrently, reload the status: requestHuman may have
+  // flipped it mid-loop, and that doesn't depend on the message insert.
+  const [, fresh] = await Promise.all([
+    prisma.message.create({
+      data: {
+        conversationId,
+        role: "AI",
+        content: reply,
+        metadata: {
+          toolsUsed,
+          latencyMs: Date.now() - started,
+          ...(ctx.lastProducts.length ? { products: JSON.parse(JSON.stringify(ctx.lastProducts)) } : {}),
+        },
       },
-    },
-  });
+    }),
+    prisma.conversation.findUniqueOrThrow({
+      where: { id: conversationId },
+      select: { status: true, firstResponseMs: true },
+    }),
+  ]);
 
-  // requestHuman may have flipped the status mid-loop — reload the truth.
-  const fresh = await prisma.conversation.findUniqueOrThrow({
-    where: { id: conversationId },
-    select: { status: true, firstResponseMs: true },
-  });
-
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      ...(fresh.firstResponseMs === null ? { firstResponseMs: Date.now() - started } : {}),
-    },
-  });
+  // Only the first reply records the response time; later ones have nothing to write.
+  if (fresh.firstResponseMs === null) {
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { firstResponseMs: Date.now() - started },
+    });
+  }
 
   return { reply, products: ctx.lastProducts, status: fresh.status };
 }

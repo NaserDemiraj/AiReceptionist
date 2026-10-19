@@ -14,7 +14,7 @@ Albanian, German (auto-detected per message).
 | Layer | Choice |
 |---|---|
 | App | Next.js (App Router) + TypeScript + Tailwind v4 |
-| Database | PostgreSQL (Supabase) + Prisma ORM |
+| Database | PostgreSQL (Neon, or any host with pgvector + pg_trgm) + Prisma ORM |
 | Auth | Auth.js v5 (credentials, JWT, org-scoped sessions) |
 | AI | Groq (`openai/gpt-oss-120b`, low reasoning effort) behind a provider-agnostic adapter (OpenAI-compatible; Anthropic/Google addable). `GROQ_MODEL` overrides every org; retired models are upgraded automatically (`src/lib/ai/models.ts`) |
 | PDF | pdf-lib (quote generation) |
@@ -32,7 +32,7 @@ npm run dev               # http://localhost:3000
 
 ### Required environment variables (see `.env.example`)
 
-- `DATABASE_URL` / `DIRECT_URL` — Supabase Postgres (transaction + session pooler)
+- `DATABASE_URL` / `DIRECT_URL` — Postgres (Neon: pooled host / direct host; see `.env.example`)
 - `AUTH_SECRET` — any long random string (`npx auth secret`)
 - `GROQ_API_KEY` — free at console.groq.com
 - `JOBS_SECRET` — protects the cron endpoint `POST /api/v1/jobs/run`
