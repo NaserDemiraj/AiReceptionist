@@ -1,13 +1,19 @@
 # Deployment guide
 
-Stack: **Vercel** (app + cron) + **Supabase** (Postgres with pgvector). Total setup ≈ 30 minutes.
+Stack: **Vercel** (app + cron) + **Neon** (Postgres with pgvector; Supabase works too). Total setup ≈ 30 minutes.
 
-## 1. Database (Supabase)
+## 1. Database (Neon)
 
-1. Create a project at [supabase.com](https://supabase.com) (EU region for GDPR).
-2. Copy both connection strings (Settings → Database):
-   - Transaction pooler (port 6543) → `DATABASE_URL` (append `?pgbouncer=true`)
-   - Session/direct (port 5432) → `DIRECT_URL`
+1. Create a project at [neon.tech](https://neon.tech) in the **same region as your Vercel
+   functions** (e.g. Frankfurt `eu-central-1` + Vercel `fra1`; EU is also better for GDPR).
+   Each chat message makes ~10-20 queries, so a cross-region database multiplies latency:
+   measured ~190 ms per query between Europe and `us-east-2`.
+2. Copy both connection strings (Dashboard → Connect):
+   - Pooled host (contains `-pooler`) → `DATABASE_URL`. **Do not append `?pgbouncer=true`**:
+     Prisma then runs `BEGIN` / `DEALLOCATE ALL` / `COMMIT` around every query and replies
+     got ~3x slower (14 s vs 4.7 s on the same data). Neon's pooler supports prepared
+     statements; 8 concurrent chats ran without errors.
+   - Direct host (no `-pooler`) → `DIRECT_URL` (used by `prisma migrate`)
 3. Apply migrations from your machine:
    ```
    cd app
@@ -56,11 +62,11 @@ per-tenant (`/api/v1/channels/…/[integrationId]`) and signature-verified.
 Prisma migrations are forward-only — there is no automatic "down" migration. Plan for it:
 
 1. **Test on staging first.** Run `npx prisma migrate deploy` against a staging
-   database (or a Supabase branch) before production. Never run `migrate dev`
+   database (or a Neon branch) before production. Never run `migrate dev`
    against production.
-2. **Snapshot before risky migrations.** Supabase paid plans take daily backups;
-   for a migration that drops/renames columns, take a manual snapshot first
-   (Dashboard → Database → Backups → "Back up now") or `pg_dump` the affected tables.
+2. **Snapshot before risky migrations.** Create a Neon branch (instant copy) or use
+   point-in-time restore on paid plans; for a migration that drops/renames columns,
+   also `pg_dump` the affected tables.
 3. **If a migration fails halfway**, fix the SQL and mark it:
    ```
    npx prisma migrate resolve --rolled-back <migration_name>   # then re-deploy
@@ -70,9 +76,9 @@ Prisma migrations are forward-only — there is no automatic "down" migration. P
 4. **To undo an applied migration**, write a new forward migration that reverses
    it (re-add the column, restore from the snapshot) — don't edit or delete
    applied migration folders; that desyncs every environment.
-5. **Supabase specifics:** run migrations over the *direct* connection
-   (`DIRECT_URL`, port 5432), never the pgbouncer pooler — DDL through the
-   transaction pooler can fail mid-migration. Long migrations on big tables
+5. **Pooler specifics:** run migrations over the *direct* connection
+   (`DIRECT_URL`), never the pooled host — DDL through a transaction pooler can
+   fail mid-migration. Long migrations on big tables
    should be run off-peak; the pooler holds client connections open meanwhile.
 6. The pgvector `hnsw` index was added manually inside the
    `knowledge_embeddings` migration — `prisma migrate dev` may warn about
@@ -80,6 +86,11 @@ Prisma migrations are forward-only — there is no automatic "down" migration. P
 
 ## Known operational limits
 
+- **Groq free tier: 8,000 tokens per minute** (every model; 1,000 requests per day). A customer
+  message that searches products or policies makes 2-3 LLM calls of ~1.5-2.5k tokens each, so the
+  free tier supports only ~1-2 real conversations per minute in total. Beyond that the provider
+  returns HTTP 429, the app retries with backoff, and replies take 12-25 s. Use Groq's paid
+  (Developer) tier for production.
 - **Rate limiting** uses Upstash Redis when `UPSTASH_REDIS_REST_URL` +
   `UPSTASH_REDIS_REST_TOKEN` are set (recommended in production); otherwise it
   falls back to in-memory, which only protects a single instance.
