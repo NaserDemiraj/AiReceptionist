@@ -2,7 +2,8 @@
 // Every business-scoped row carries organizationId; all queries must filter by it.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
